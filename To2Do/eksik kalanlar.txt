@@ -1,0 +1,135 @@
+DEVELOPMENT NOTES - To2Do ESP32 Application
+==============================================
+
+MISSING FEATURES TO IMPLEMENT:
+-------------------------------
+
+2- Browser password field, on/off, password change
+3- SMTP mail integration ✓ (BASIC IMPLEMENTATION DONE)
+4- Mail settings:
+   - Password reset link
+   - Backup notifications
+   - Upcoming event reminders
+5- Translation EN-DE-TR (PLANNED)
+6- OLED screen and startup animation, button (COMING SOON)
+
+OLED DISPLAY FEATURES:
+----------------------
+
+1- Startup animation (only on first boot)
+2- Title display
+3- Today's todo count // Today: 4 To2Do
+4- This week's todo count // This Week: 16 To2Do
+5- Total project count, total todo count // Projects 7 - ToDo 37
+6- WiFi or AP mode text (centered)       Wifi-ssid
+   .local IP address                     smartkraft-todo.local
+
+IMPLEMENTATION STATUS:
+----------------------
+
+✓ Core Architecture
+  - Data Manager with SPIFFS persistence
+  - WiFi Manager with AP and Client modes
+  - Backup Manager for import/export
+  - Mail Manager for SMTP notifications
+  - Notification Manager (basic structure)
+  - Persistence layer
+
+✓ Web Interface
+  - Modern dark-themed UI
+  - Responsive design
+  - Projects and tasks management
+  - Categories (Work, Personal, Projects)
+  - Priority levels (High, Medium, Low)
+  - Search and filter functionality
+
+✓ Data Features
+  - JSON-based storage
+  - Import/Export backup
+  - Factory reset
+  - Demo data initialization
+
+✓ Network Features
+  - AP Mode support
+  - WiFi Client mode
+  - Primary and Backup WiFi support
+  - mDNS support
+  - Static IP configuration
+
+✓ Settings
+  - GUI customization (theme, titles, categories)
+  - Network configuration
+  - Mail SMTP configuration
+  - System information display
+
+PENDING:
+--------
+
+⚠ OLED Display Integration
+  - Hardware driver implementation
+  - Startup animation
+  - Real-time statistics display
+  - Button input handling
+
+⚠ Enhanced Notifications
+  - Due date reminders
+  - Email scheduling
+  - Task completion notifications
+
+⚠ Localization
+  - Multi-language support (EN, DE, TR)
+  - Language selection in settings
+
+⚠ Browser Security
+  - Password protection option
+  - Authentication system
+
+NOTES:
+------
+
+- All data stored in single JSON file: /userdata.json
+- 24KB buffer for JSON operations
+- Demo content includes 7 projects across 3 categories
+- SMTP email requires App Password for Gmail
+- mDNS allows friendly URLs like http://to2do.local
+- Factory reset restores demo content
+
+LIBRARY DEPENDENCIES:
+--------------------
+
+Required:
+- ArduinoJson v6.x
+- ESP32 Core (WiFi, WebServer, SPIFFS)
+- ESP_Mail_Client (for SMTP)
+
+Optional (for OLED):
+- Adafruit_SSD1306
+- Adafruit_GFX
+
+TESTING CHECKLIST:
+------------------
+
+□ Test AP mode startup
+□ Test WiFi client connection
+□ Test project creation/editing/deletion
+□ Test task creation/editing/deletion/completion
+□ Test category switching
+□ Test search functionality
+□ Test filter functionality
+□ Test backup export
+□ Test backup import
+□ Test factory reset
+□ Test settings save/load
+□ Test network configuration
+□ Test SMTP email sending
+□ Test mDNS access
+□ Test mobile responsiveness
+
+KNOWN ISSUES:
+-------------
+
+- OLED display not yet implemented
+- Notification scheduling not implemented
+- No authentication/password protection
+- No multi-language support yet
+- Email notifications basic (no scheduling)
