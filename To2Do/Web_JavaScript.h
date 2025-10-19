@@ -25,9 +25,23 @@ String getJavaScriptCombined() {
   return combinedJS;
 }
 
-const char* getJavaScript() {
-  static String js = getJavaScriptCombined();
-  return js.c_str();
+// WARNING: This function returns a reference to a static String.
+// The String persists in memory for the lifetime of the program.
+// Use this only for content that needs to be served repeatedly.
+const String& getJavaScript() {
+  static const String js = getJavaScriptCombined();
+  return js;
 }
+
+// Alternative if you need to avoid static storage entirely:
+// const char* getJavaScriptOnce() {
+//   static bool called = false;
+//   static String js = "";
+//   if (!called) {
+//     js = getJavaScriptCombined();
+//     called = true;
+//   }
+//   return js.c_str();
+// }
 
 #endif

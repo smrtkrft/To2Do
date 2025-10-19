@@ -15,6 +15,7 @@ class WorkspaceFinal {
         this.nextProjectId = 1;
         this.nextTaskId = 1;
         this.editingTask = null;
+        this.editingTaskId = null;
         this.networkStatusInterval = null;
         
         // Settings
@@ -344,6 +345,19 @@ class WorkspaceFinal {
 
         document.getElementById('modal-task-create').addEventListener('click', () => {
             createTask();
+        });
+
+        // Task edit modal
+        document.getElementById('edit-modal-task-cancel').addEventListener('click', () => {
+            hideTaskEditModal();
+        });
+
+        document.getElementById('edit-modal-task-update').addEventListener('click', () => {
+            updateTask();
+        });
+
+        document.getElementById('task-edit-modal').addEventListener('click', (e) => {
+            if (e.target.id === 'task-edit-modal') hideTaskEditModal();
         });
 
         // Project modal buttons

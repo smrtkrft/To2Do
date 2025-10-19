@@ -14,23 +14,19 @@
 #include "Web_Interface.h"
 #include "Web_JavaScript.h"
 #include "Backup_Manager.h"
-#include "Mail_Manager.h"
-#include "Notification_Manager.h"
 
 WebServer server(80);
 PersistenceManager persistence;
 WiFiManager* wifiManager;
 BackupManager* backupManager;
-MailManager* mailManager;
-NotificationManager* notificationManager;
 
-const size_t JSON_BUFFER_SIZE = 16384;
+const size_t JSON_BUFFER_SIZE = 24576;  // Standardized: matches Data_Manager.h and Backup_Manager.h
 
 void setup() {
   Serial.begin(115200);
   delay(500);
   
-  Serial.println("\n=== SmartKraft-ToDo Starting ===");
+  Serial.println("\n=== SmartKraft-ToDo Initializing ===");
   
   // Initialize persistence (SPIFFS)
   if (!persistence.begin()) {
@@ -40,44 +36,49 @@ void setup() {
   
   // Initialize WiFi Manager
   wifiManager = new WiFiManager(&persistence);
-  wifiManager->begin();
+  wifiManager->begin();  // Non-blocking - will connect in loop()
   
   // Initialize Backup Manager
   backupManager = new BackupManager(persistence.getDataManager());
-  
-  // Initialize Mail Manager
-  mailManager = new MailManager(persistence.getDataManager());
-  
-  // Initialize Notification Manager
-  notificationManager = new NotificationManager(persistence.getDataManager());
-  configTime(0, 0, "pool.ntp.org", "time.nist.gov");
   
   // Setup web server
   setupServerRoutes();
   server.begin();
   
-  Serial.println("\n=== SmartKraft-ToDo READY ===");
-  Serial.printf("Mode: %s\n", wifiManager->isAP() ? "AP" : "WiFi Connected");
-  Serial.printf("IP: %s\n", wifiManager->getIP().c_str());
-  Serial.printf("Access: http://%s\n", wifiManager->getMDNS().c_str());
+  Serial.println("[System] Setup phase complete, WiFi connecting in background...");
   Serial.println();
 }
 
 void loop() {
-  wifiManager->loop();  // WiFi management
+  wifiManager->loop();  // WiFi management (includes connection logic)
   server.handleClient();
+  
+  // Print READY message once when WiFi is stabilized
+  static bool readyPrinted = false;
+  
+  if (!readyPrinted) {
+    // Check if system is ready (WiFi connected OR AP mode started and stable)
+    if (wifiManager->isWiFiConnected() || (wifiManager->isAP() && (millis() > 2000))) {
+      readyPrinted = true;
+      
+      Serial.println("\n=== SmartKraft-ToDo READY ===");
+      Serial.printf("Mode: %s\n", wifiManager->isAP() ? "AP Mode" : "WiFi Connected");
+      Serial.printf("IP: %s\n", wifiManager->getIP().c_str());
+      Serial.printf("Access: http://%s\n", wifiManager->getMDNS().c_str());
+      Serial.println();
+    }
+  }
+  
   delay(2);
 }
 
 void setupServerRoutes() {
   server.on("/", HTTP_GET, handleRoot);
   server.on("/app.js", HTTP_GET, []() {
-    server.send(200, "application/javascript", getJavaScript());
+    server.send(200, "application/javascript", getJavaScript().c_str());
   });
   server.on("/api/todos", HTTP_GET, handleGetTodos);
   server.on("/api/todos", HTTP_POST, handleCreateTodo);
-  server.on("/api/todos", HTTP_PUT, handleUpdateTodo);
-  server.on("/api/todos", HTTP_DELETE, handleDeleteTodo);
   
   // Settings API endpoints
   server.on("/api/settings", HTTP_GET, handleGetSettings);
@@ -95,25 +96,6 @@ void setupServerRoutes() {
   // Backup API endpoints
   server.on("/api/backup/export", HTTP_GET, handleBackupExport);
   server.on("/api/backup/import", HTTP_POST, handleBackupImport);
-  
-  // Mail API endpoints
-  server.on("/api/mail/config", HTTP_GET, handleGetMailConfig);
-  server.on("/api/mail/config", HTTP_POST, handleSaveMailConfig);
-  
-  // Notification API endpoints
-  server.on("/api/notifications/today", HTTP_GET, []() {
-    handleNotifications("today");
-  });
-  server.on("/api/notifications/tomorrow", HTTP_GET, []() {
-    handleNotifications("tomorrow");
-  });
-  server.on("/api/notifications/week", HTTP_GET, []() {
-    handleNotifications("week");
-  });
-  server.on("/api/notifications/overdue", HTTP_GET, []() {
-    handleNotifications("overdue");
-  });
-  server.on("/api/notifications/timezone", HTTP_POST, handleSetTimezone);
   
   server.on("/api/health", HTTP_GET, []() {
     server.send(200, "application/json", "{\"status\":\"ok\"}");
@@ -152,14 +134,6 @@ void handleCreateTodo() {
     Serial.println("[Todos] ✗ Save failed!");
     server.send(500, "application/json", "{\"error\":\"Write failed\"}");
   }
-}
-
-void handleUpdateTodo() {
-  server.send(200, "application/json", "{\"success\":true}");
-}
-
-void handleDeleteTodo() {
-  server.send(200, "application/json", "{\"success\":true}");
 }
 
 // ==================== NETWORK API ====================
@@ -310,64 +284,4 @@ void handleBackupImport() {
   } else {
     server.send(500, "application/json", "{\"error\":\"Import failed\"}");
   }
-}
-
-void handleGetMailConfig() {
-  if (!mailManager) {
-    server.send(500, "application/json", "{\"error\":\"Mail manager not ready\"}");
-    return;
-  }
-  
-  String configData = mailManager->getConfigJSON();
-  server.send(200, "application/json", configData);
-}
-
-void handleSaveMailConfig() {
-  if (!mailManager) {
-    server.send(500, "application/json", "{\"error\":\"Mail manager not ready\"}");
-    return;
-  }
-  
-  if (!server.hasArg("plain")) {
-    server.send(400, "application/json", "{\"error\":\"No data\"}");
-    return;
-  }
-  
-  String configData = server.arg("plain");
-  
-  if (mailManager->saveConfig(configData)) {
-    server.send(200, "application/json", "{\"success\":true}");
-  } else {
-    server.send(500, "application/json", "{\"error\":\"Save failed\"}");
-  }
-}
-
-void handleNotifications(String filterType) {
-  if (!notificationManager) {
-    server.send(500, "application/json", "{\"error\":\"Notification manager not ready\"}");
-    return;
-  }
-  
-  String notifications = notificationManager->getNotifications(filterType);
-  server.send(200, "application/json", notifications);
-}
-
-void handleSetTimezone() {
-  if (!notificationManager) {
-    server.send(500, "application/json", "{\"error\":\"Notification manager not ready\"}");
-    return;
-  }
-  
-  if (!server.hasArg("plain")) {
-    server.send(400, "application/json", "{\"error\":\"No data\"}");
-    return;
-  }
-  
-  DynamicJsonDocument doc(256);
-  deserializeJson(doc, server.arg("plain"));
-  
-  int offset = doc["offset"] | 0;
-  notificationManager->setTimezoneOffset(offset);
-  
-  server.send(200, "application/json", "{\"success\":true}");
 }

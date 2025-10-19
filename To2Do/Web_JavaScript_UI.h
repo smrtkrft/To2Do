@@ -198,12 +198,13 @@ function renderTask(task) {
     html += `
                     <div class="task-footer">
                         <div class="task-meta">
-                            <span class="task-date-display" data-task-id="${task.id}" style="cursor: pointer; text-decoration: underline;">${formatDate(task.date)}</span>
+                            <span class="task-date-display" data-task-id="${task.id}">${formatDate(task.date)}</span>
                             <span>|</span>
                             <span>${task.priority.toUpperCase()}</span>
                         </div>
                         <div class="task-actions">
                             <button class="task-action-btn add-dep" data-task-id="${task.id}">+ BAGLANTI</button>
+                            <button class="task-action-btn edit" data-task-id="${task.id}">DUZENLE</button>
                             <button class="task-action-btn delete" data-task-id="${task.id}">SIL</button>
                         </div>
                     </div>
@@ -228,6 +229,9 @@ function updateStats() {
 function applySettings() {
     // Apply app title
     document.getElementById('app-title').textContent = app.settings.appTitle;
+    
+    // Update browser tab title
+    document.title = app.settings.appTitle;
     
     // Apply category names
     document.getElementById('tab-cat1').textContent = app.settings.category1;

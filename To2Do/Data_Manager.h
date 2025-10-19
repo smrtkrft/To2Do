@@ -322,8 +322,8 @@ public:
         
         // Network Settings
         JsonObject network = userData.createNestedObject("network");
-        network["apSSID"] = "SmartKraft-To2Do";
-        network["apMDNS"] = "to2do";
+        network["apSSID"] = "SmartKraft-ToDo";
+        network["apMDNS"] = "smartkraft-todo";
         network["primarySSID"] = "";
         network["primaryPassword"] = "";
         network["primaryIP"] = "";

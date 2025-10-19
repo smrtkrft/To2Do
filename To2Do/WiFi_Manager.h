@@ -10,8 +10,8 @@ private:
     PersistenceManager* persistence;
     
     // AP Mode configuration (loaded from persistence)
-    String apSSID = "SmartKraft-To2Do";
-    String apMDNS = "to2do";
+    String apSSID = "SmartKraft-ToDo";
+    String apMDNS = "smartkraft-todo";
     
     // Network credentials (loaded from persistence)
     String primarySSID = "";
@@ -35,14 +35,15 @@ private:
     unsigned long connectionStartTime = 0;
     unsigned long lastConnectionCheck = 0;
     int connectionFailCount = 0;  // Count consecutive failures
+    unsigned long setupStartTime = 0;  // Track setup completion time
     
-    // Constants
-    static constexpr unsigned long INITIAL_SCAN_WAIT = 15000;        // 15 seconds (changed from 30)
-    static constexpr unsigned long AP_SCAN_INTERVAL_EARLY = 30000;   // 30 seconds (first 5 min)
-    static constexpr unsigned long AP_SCAN_INTERVAL_NORMAL = 120000; // 2 minutes (after 5 min)
+    // Constants - OPTIMIZED FOR FAST STARTUP
+    static constexpr unsigned long CONNECTION_TIMEOUT = 6000;        // 6 seconds (was 15)
+    static constexpr unsigned long AP_SCAN_INTERVAL_EARLY = 30000;   // 30 seconds (first 5 min in AP mode)
+    static constexpr unsigned long AP_SCAN_INTERVAL_NORMAL = 300000; // 5 minutes (after 5 min in AP mode)
     static constexpr unsigned long AP_MODE_EARLY_PERIOD = 300000;    // 5 minutes
-    static constexpr unsigned long CONNECTION_TIMEOUT = 15000;       // 15 seconds
-    static constexpr unsigned long CONNECTION_CHECK_INTERVAL = 5000; // 5 seconds stability check
+    static constexpr unsigned long CONNECTION_CHECK_INTERVAL = 2000; // 2 seconds stability check
+    static constexpr unsigned long SETUP_NETWORK_SCAN_TIMEOUT = 5000; // 5 seconds initial scan timeout
     
     String currentConnectingMDNS = "";
     String currentConnectingSSID = "";
@@ -198,33 +199,54 @@ public:
         
         // Check if we have any saved credentials
         if (primarySSID.isEmpty() && backupSSID.isEmpty()) {
-            Serial.println("[WiFi] No saved credentials found");
+            Serial.println("[WiFi] No saved credentials found - switching to AP mode immediately");
             switchToAPMode();
+            setupStartTime = millis();
             return;
         }
         
-        Serial.println("[WiFi] Saved credentials found, scanning networks...");
+        Serial.println("[WiFi] Saved credentials found, starting network scan...");
         
-        // First scan attempt
+        // First scan attempt - try to find registered networks
         if (scanForSavedNetworks()) {
-            Serial.println("[WiFi] ✓ Saved network found on first scan, connecting...");
+            Serial.println("[WiFi] ✓ Saved network found, connecting immediately...");
             startConnectionSequence();
-            return;
-        }
-        
-        // Wait 15 seconds and try again
-        Serial.println("[WiFi] Saved networks not found, waiting 15 seconds...");
-        delay(INITIAL_SCAN_WAIT);
-        
-        Serial.println("[WiFi] Second scan attempt...");
-        if (scanForSavedNetworks()) {
-            Serial.println("[WiFi] ✓ Saved network found on second scan, connecting...");
-            startConnectionSequence();
+            
+            // === WAIT FOR CONNECTION (MAX 2 SECONDS) ===
+            unsigned long connectStartTime = millis();
+            while (millis() - connectStartTime < 2000) {
+                // Check connection status
+                wl_status_t status = WiFi.status();
+                
+                if (status == WL_CONNECTED) {
+                    // Connection successful!
+                    isConnected = true;
+                    tryingToConnect = false;
+                    
+                    Serial.println("[WiFi] ✓ Connected during setup!");
+                    Serial.printf("[WiFi] IP: %s\n", WiFi.localIP().toString().c_str());
+                    
+                    // Setup mDNS
+                    if (MDNS.begin(currentConnectingMDNS.c_str())) {
+                        Serial.printf("[WiFi] mDNS: http://%s.local\n", currentConnectingMDNS.c_str());
+                    }
+                    
+                    Serial.println("[WiFi] ========================================");
+                    setupStartTime = millis();
+                    return;
+                }
+                
+                // Still trying - brief delay
+                delay(100);
+            }
+            
+            // Timeout - will continue in loop()
+            Serial.println("[WiFi] Connection attempt timeout during setup, will continue in loop()...");
         } else {
-            Serial.println("[WiFi] ✗ Saved networks still not found, switching to AP mode");
-            switchToAPMode();
+            Serial.println("[WiFi] No saved networks found - will switch to AP mode in loop()");
         }
         
+        setupStartTime = millis();
         Serial.println("[WiFi] ========================================");
     }
     

@@ -25,6 +25,53 @@ function hideTaskModal() {
     document.getElementById('task-modal').classList.remove('active');
 }
 
+function showTaskEditModal(taskId) {
+    const task = app.tasks.find(t => t.id === taskId);
+    if (!task) return;
+
+    app.editingTaskId = taskId;
+    
+    document.getElementById('edit-modal-task-title').value = task.title;
+    document.getElementById('edit-modal-task-desc').value = task.description || '';
+    document.getElementById('edit-modal-task-type').value = task.type;
+    document.getElementById('edit-modal-task-priority').value = task.priority;
+    document.getElementById('edit-modal-task-date').value = task.date || '';
+    document.getElementById('task-edit-modal').classList.add('active');
+    document.getElementById('edit-modal-task-title').focus();
+}
+
+function hideTaskEditModal() {
+    document.getElementById('task-edit-modal').classList.remove('active');
+    app.editingTaskId = null;
+}
+
+function updateTask() {
+    const taskId = app.editingTaskId;
+    if (!taskId) return;
+
+    const task = app.tasks.find(t => t.id === taskId);
+    if (!task) return;
+
+    const title = document.getElementById('edit-modal-task-title').value.trim();
+    if (!title) {
+        showToast('TITLE REQUIRED', 'error');
+        return;
+    }
+
+    task.title = title;
+    task.description = document.getElementById('edit-modal-task-desc').value.trim();
+    task.type = document.getElementById('edit-modal-task-type').value;
+    task.priority = document.getElementById('edit-modal-task-priority').value;
+    task.date = document.getElementById('edit-modal-task-date').value;
+
+    hideTaskEditModal();
+    renderTasks();
+    renderProjects();
+    updateStats();
+    showToast('UPDATED');
+    app.saveToServer();
+}
+
 function showProjectModal() {
     document.getElementById('modal-project-name').value = '';
     document.getElementById('modal-project-desc').value = '';
@@ -504,14 +551,12 @@ async function saveSettings() {
     
     applySettings();
     
-    // Save GUI settings to server
-    await app.saveSettingsToServer();
-    
-    // Save and apply network settings
-    await app.saveNetworkSettings();
-    
     showToast('SETTINGS SAVED');
     hideSettingsModal();
+    
+    // Save to server in background (non-blocking)
+    app.saveSettingsToServer().catch(err => console.error('Settings save error:', err));
+    app.saveNetworkSettings().catch(err => console.error('Network settings save error:', err));
 }
 
 function loadNetworkSettingsToModal() {
@@ -602,24 +647,17 @@ function bindTaskEvents() {
         });
     });
 
-    container.querySelectorAll('.task-title').forEach(el => {
-        el.addEventListener('dblclick', () => {
-            const taskId = parseInt(el.dataset.taskId);
-            startInlineEdit(taskId, 'title', el);
-        });
-    });
-
-    container.querySelectorAll('.task-description').forEach(el => {
-        el.addEventListener('dblclick', () => {
-            const taskId = parseInt(el.dataset.taskId);
-            startInlineEdit(taskId, 'description', el);
-        });
-    });
-
     container.querySelectorAll('.task-action-btn.delete').forEach(el => {
         el.addEventListener('click', () => {
             const taskId = parseInt(el.dataset.taskId);
             deleteTask(taskId);
+        });
+    });
+
+    container.querySelectorAll('.task-action-btn.edit').forEach(el => {
+        el.addEventListener('click', () => {
+            const taskId = parseInt(el.dataset.taskId);
+            showTaskEditModal(taskId);
         });
     });
 
@@ -643,13 +681,6 @@ function bindTaskEvents() {
             const taskId = parseInt(el.dataset.taskId);
             const checklistId = parseInt(el.dataset.checklistId);
             removeChecklistItem(taskId, checklistId);
-        });
-    });
-
-    container.querySelectorAll('.task-date-display').forEach(el => {
-        el.addEventListener('click', () => {
-            const taskId = parseInt(el.dataset.taskId);
-            editTaskDate(taskId);
         });
     });
 }
