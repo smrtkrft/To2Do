@@ -5,7 +5,7 @@
 const char* getJavaScriptUI() {
   return R"XJSUIX(
 // ==================== UI RENDERING FUNCTIONS ====================
-// Proje ve Görev Render Fonksiyonları
+// Project and Task Render Functions
 
 function renderProjects(searchTerm = '') {
     const container = document.getElementById('projects-list');
@@ -204,7 +204,7 @@ function renderTask(task) {
                         </div>
                         <div class="task-actions">
                             <button class="task-action-btn add-dep" data-task-id="${task.id}">+ BAGLANTI</button>
-                            <button class="task-action-btn edit" data-task-id="${task.id}">DUZENLE</button>
+                            <button class="task-action-btn edit" data-task-id="${task.id}">DÜZENLE</button>
                             <button class="task-action-btn delete" data-task-id="${task.id}">SIL</button>
                         </div>
                     </div>
@@ -227,10 +227,8 @@ function updateStats() {
 }
 
 function applySettings() {
-    // Apply app title
+    // Apply app title to both page title and app title
     document.getElementById('app-title').textContent = app.settings.appTitle;
-    
-    // Update browser tab title
     document.title = app.settings.appTitle;
     
     // Apply category names

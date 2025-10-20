@@ -10,8 +10,8 @@ private:
     PersistenceManager* persistence;
     
     // AP Mode configuration (loaded from persistence)
-    String apSSID = "SmartKraft-ToDo";
-    String apMDNS = "smartkraft-todo";
+    String apSSID = "SmartKraft-To2Do";
+    String apMDNS = "to2do";
     
     // Network credentials (loaded from persistence)
     String primarySSID = "";
@@ -35,33 +35,47 @@ private:
     unsigned long connectionStartTime = 0;
     unsigned long lastConnectionCheck = 0;
     int connectionFailCount = 0;  // Count consecutive failures
-    unsigned long setupStartTime = 0;  // Track setup completion time
     
-    // Constants - OPTIMIZED FOR FAST STARTUP
-    static constexpr unsigned long CONNECTION_TIMEOUT = 6000;        // 6 seconds (was 15)
-    static constexpr unsigned long AP_SCAN_INTERVAL_EARLY = 30000;   // 30 seconds (first 5 min in AP mode)
-    static constexpr unsigned long AP_SCAN_INTERVAL_NORMAL = 300000; // 5 minutes (after 5 min in AP mode)
+    // Constants - OPTIMIZED FOR SPEED AND STABILITY
+    static constexpr unsigned long INITIAL_SCAN_WAIT = 3000;         // 3 seconds (faster retry)
+    static constexpr unsigned long AP_SCAN_INTERVAL_EARLY = 30000;   // 30 seconds (first 5 min)
+    static constexpr unsigned long AP_SCAN_INTERVAL_NORMAL = 120000; // 2 minutes (after 5 min)
     static constexpr unsigned long AP_MODE_EARLY_PERIOD = 300000;    // 5 minutes
-    static constexpr unsigned long CONNECTION_CHECK_INTERVAL = 2000; // 2 seconds stability check
-    static constexpr unsigned long SETUP_NETWORK_SCAN_TIMEOUT = 5000; // 5 seconds initial scan timeout
+    static constexpr unsigned long CONNECTION_TIMEOUT = 6000;        // 6 seconds (fast fail for quick retry)
+    static constexpr unsigned long CONNECTION_CHECK_INTERVAL = 5000; // 5 seconds stability check
+    static constexpr unsigned long RADIO_STABILIZATION_DELAY = 500;  // 500ms for WiFi radio to stabilize
+    static constexpr unsigned long QUICK_CONNECTION_CHECK = 3000;    // 3 seconds initial check in begin()
     
     String currentConnectingMDNS = "";
     String currentConnectingSSID = "";
     
-    // Scan for saved networks
-    bool scanForSavedNetworks() {
-        Serial.println("[WiFi] Scanning networks...");
-        int n = WiFi.scanNetworks();
+    // Scan for saved networks and return which one to connect - OPTIMIZED
+    int scanForBestNetwork() {
+        Serial.println("[WiFi] Scanning for networks...");
+        unsigned long scanStart = millis();
         
-        if (n == 0) {
-            Serial.println("[WiFi] No networks found");
-            return false;
+        // Fast scan since radio is pre-warmed
+        WiFi.scanNetworks(false, false, false, 120); // async=false, show_hidden=false, passive=false, max_ms=120
+        int n = WiFi.scanComplete();
+        
+        if (n == WIFI_SCAN_RUNNING) {
+            // Wait for scan to complete (shouldn't happen with sync scan)
+            while ((n = WiFi.scanComplete()) == WIFI_SCAN_RUNNING) {
+                delay(10);
+            }
         }
         
-        Serial.printf("[WiFi] Found %d networks\n", n);
+        Serial.printf("[WiFi] Scan completed in %lums, found %d networks\n", 
+                     millis() - scanStart, n);
+        
+        if (n == 0) {
+            return 0; // No networks found
+        }
         
         bool primaryFound = false;
         bool backupFound = false;
+        int primaryRSSI = -100;
+        int backupRSSI = -100;
         
         for (int i = 0; i < n; i++) {
             String ssid = WiFi.SSID(i);
@@ -69,96 +83,118 @@ private:
             
             if (!primarySSID.isEmpty() && ssid == primarySSID) {
                 primaryFound = true;
-                Serial.printf("[WiFi] ✓ Primary found: %s (RSSI: %d)\n", ssid.c_str(), rssi);
+                primaryRSSI = rssi;
+                Serial.printf("[WiFi] Primary network '%s' found (RSSI: %d)\n", 
+                             ssid.c_str(), rssi);
             }
             
             if (!backupSSID.isEmpty() && ssid == backupSSID) {
                 backupFound = true;
-                Serial.printf("[WiFi] ✓ Backup found: %s (RSSI: %d)\n", ssid.c_str(), rssi);
+                backupRSSI = rssi;
+                Serial.printf("[WiFi] Backup network '%s' found (RSSI: %d)\n", 
+                             ssid.c_str(), rssi);
             }
         }
         
         WiFi.scanDelete();
-        return primaryFound || backupFound;
+        
+        // Return priority: Primary (1) > Backup (2) > None (0)
+        if (primaryFound) {
+            Serial.printf("[WiFi] Selected: PRIMARY (signal: %d dBm)\n", primaryRSSI);
+            return 1;
+        }
+        if (backupFound) {
+            Serial.printf("[WiFi] Selected: BACKUP (signal: %d dBm)\n", backupRSSI);
+            return 2;
+        }
+        
+        Serial.println("[WiFi] No saved networks found");
+        return 0;
     }
     
-    // Try to connect to WiFi
+    // Try to connect to WiFi - OPTIMIZED with pre-warmed radio
     void tryConnect(const String& ssid, const String& password, const String& ip, const String& mdns) {
         if (ssid.isEmpty()) return;
         
         Serial.printf("[WiFi] Connecting to: %s\n", ssid.c_str());
+        unsigned long startTime = millis();
         
-        // Disable AP mode if active
         if (isAPMode) {
-            Serial.println("[WiFi] Disabling AP mode...");
             WiFi.softAPdisconnect(true);
             isAPMode = false;
+            delay(50);
+            WiFi.mode(WIFI_STA);  // Switch back to STA mode
+            delay(100);
         }
         
-        WiFi.mode(WIFI_STA);
-        WiFi.disconnect(true);
-        delay(100);
+        // Radio is already pre-initialized in setup(), no need for OFF/ON cycle
+        // Just ensure we're in STA mode (minimal delay)
+        if (WiFi.getMode() != WIFI_STA) {
+            WiFi.mode(WIFI_STA);
+            delay(50); // Quick mode verification
+        }
         
-        // Configure static IP if provided
         if (!ip.isEmpty() && ip != "0.0.0.0") {
-            IPAddress staticIP, gateway, subnet;
+            IPAddress staticIP, gateway, subnet, dns;
             if (staticIP.fromString(ip)) {
                 gateway.fromString(ip);
-                gateway[3] = 1;
+                gateway[3] = 1; // x.x.x.1
                 subnet.fromString("255.255.255.0");
+                dns = gateway; // Use gateway as DNS
                 
-                if (WiFi.config(staticIP, gateway, subnet)) {
-                    Serial.printf("[WiFi] Static IP configured: %s\n", ip.c_str());
+                if (!WiFi.config(staticIP, gateway, subnet, dns)) {
+                    Serial.println("[WiFi] ⚠ Static IP config failed, trying DHCP");
+                    WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE);
+                } else {
+                    Serial.printf("[WiFi] Using static IP: %s (GW: %s)\n", 
+                                 ip.c_str(), gateway.toString().c_str());
                 }
             }
         } else {
             WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE);
+            Serial.println("[WiFi] Using DHCP");
         }
         
         WiFi.begin(ssid.c_str(), password.c_str());
+        
+        // Radio already warmed up, just brief stabilization for DHCP/config
+        Serial.println("[WiFi] Waiting for connection establishment...");
+        delay(RADIO_STABILIZATION_DELAY); // 500ms for DHCP to start
         
         tryingToConnect = true;
         connectionStartTime = millis();
         currentConnectingSSID = ssid;
         currentConnectingMDNS = mdns;
+        
+        Serial.printf("[WiFi] Connection init took %lums\n", millis() - startTime);
     }
     
     // Switch to AP Mode (ONLY if not connected AND network not available)
     void switchToAPMode() {
-        // Don't switch to AP if already connected to WiFi
         if (isConnected && WiFi.status() == WL_CONNECTED) {
-            Serial.println("[WiFi] Already connected to WiFi, AP mode not needed");
             return;
         }
         
-        // CRITICAL: Do final scan before opening AP mode
-        // If saved SSID is available, DO NOT open AP mode
-        if (!primarySSID.isEmpty() || !backupSSID.isEmpty()) {
-            Serial.println("[WiFi] Final scan before AP mode...");
-            if (scanForSavedNetworks()) {
-                Serial.println("[WiFi] ✓ Network available! Connecting instead of AP mode...");
-                startConnectionSequence();
+        Serial.println("[WiFi] Switching to AP Mode...");
+        
+        // Skip re-scanning if we just came from begin() - we already scanned twice
+        // Only scan when called from loop() connection loss scenarios
+        if (!tryingToConnect && (!primarySSID.isEmpty() || !backupSSID.isEmpty())) {
+            Serial.println("[WiFi] Quick check for available networks before AP Mode...");
+            int availableNetwork = scanForBestNetwork();
+            if (availableNetwork > 0) {
+                Serial.println("[WiFi] Network found, connecting instead of AP Mode");
+                startConnectionSequence(availableNetwork);
                 return;
             }
-            Serial.println("[WiFi] ✗ Network not available, proceeding with AP mode");
         }
         
-        Serial.println("[WiFi] ========================================");
-        Serial.println("[WiFi] SWITCHING TO AP MODE");
-        Serial.println("[WiFi] ========================================");
-        
+        WiFi.disconnect();
         WiFi.mode(WIFI_AP);
-        WiFi.softAP(apSSID.c_str());  // No password
+        WiFi.softAP(apSSID.c_str());
         delay(100);
         
         IPAddress IP = WiFi.softAPIP();
-        Serial.printf("[WiFi] AP SSID: %s\n", apSSID.c_str());
-        Serial.printf("[WiFi] AP IP: %s\n", IP.toString().c_str());
-        
-        // Setup mDNS for AP mode
-        if (MDNS.begin(apMDNS.c_str())) {
-            Serial.printf("[WiFi] AP mDNS: http://%s.local\n", apMDNS.c_str());
-        }
         
         isAPMode = true;
         isConnected = false;
@@ -166,17 +202,35 @@ private:
         apModeStartTime = millis();
         lastScanTime = millis();
         
-        Serial.println("[WiFi] ========================================");
+        Serial.println("[WiFi] ✓ AP Mode started");
+        Serial.printf("[WiFi] SSID: %s (Open - No password)\n", apSSID.c_str());
+        Serial.printf("[WiFi] IP: %s\n", IP.toString().c_str());
+        
+        if (MDNS.begin(apMDNS.c_str())) {
+            Serial.printf("[WiFi] mDNS: http://%s.local\n", apMDNS.c_str());
+        }
+        
+        Serial.println("[WiFi] Ready!");
     }
     
-    // Start connection sequence
-    void startConnectionSequence() {
-        if (!primarySSID.isEmpty()) {
+    // Start connection sequence based on available network
+    void startConnectionSequence(int networkType = 0) {
+        if (networkType == 1 && !primarySSID.isEmpty()) {
+            // Primary network available
             tryConnect(primarySSID, primaryPassword, primaryIP, primaryMDNS);
-        } else if (!backupSSID.isEmpty()) {
+        } else if (networkType == 2 && !backupSSID.isEmpty()) {
+            // Backup network available
             tryConnect(backupSSID, backupPassword, backupIP, backupMDNS);
+        } else if (networkType == 0) {
+            // No specific network, try primary first then backup
+            if (!primarySSID.isEmpty()) {
+                tryConnect(primarySSID, primaryPassword, primaryIP, primaryMDNS);
+            } else if (!backupSSID.isEmpty()) {
+                tryConnect(backupSSID, backupPassword, backupIP, backupMDNS);
+            } else {
+                switchToAPMode();
+            }
         } else {
-            Serial.println("[WiFi] No saved credentials, switching to AP mode");
             switchToAPMode();
         }
     }
@@ -187,67 +241,117 @@ public:
     }
     
     void begin() {
-        Serial.println("[WiFi] ========================================");
-        Serial.println("[WiFi] SMART WIFI MANAGER STARTING");
-        Serial.println("[WiFi] ========================================");
+        Serial.println("[WiFi] WiFiManager starting...");
+        unsigned long beginStart = millis();
         
-        // Load network settings from persistence
         loadNetworkSettings();
+        
+        // Radio should already be pre-initialized in setup()
+        Serial.printf("[WiFi] Radio status: mode=%d, status=%d\n", WiFi.getMode(), WiFi.status());
         
         WiFi.setAutoReconnect(false);
         WiFi.persistent(false);
         
-        // Check if we have any saved credentials
+        // Check if we have any saved networks
         if (primarySSID.isEmpty() && backupSSID.isEmpty()) {
-            Serial.println("[WiFi] No saved credentials found - switching to AP mode immediately");
+            Serial.println("[WiFi] No saved networks, starting AP Mode");
             switchToAPMode();
-            setupStartTime = millis();
+            Serial.printf("[WiFi] Startup completed in %lums\n", millis() - beginStart);
             return;
         }
         
-        Serial.println("[WiFi] Saved credentials found, starting network scan...");
+        Serial.printf("[WiFi] Saved networks - Primary: '%s', Backup: '%s'\n", 
+                     primarySSID.c_str(), backupSSID.c_str());
         
-        // First scan attempt - try to find registered networks
-        if (scanForSavedNetworks()) {
-            Serial.println("[WiFi] ✓ Saved network found, connecting immediately...");
-            startConnectionSequence();
+        // First scan - try to find saved networks
+        int availableNetwork = scanForBestNetwork();
+        if (availableNetwork > 0) {
+            Serial.println("[WiFi] Network found on first scan, connecting...");
+            startConnectionSequence(availableNetwork);
             
-            // === WAIT FOR CONNECTION (MAX 2 SECONDS) ===
-            unsigned long connectStartTime = millis();
-            while (millis() - connectStartTime < 2000) {
-                // Check connection status
-                wl_status_t status = WiFi.status();
-                
-                if (status == WL_CONNECTED) {
-                    // Connection successful!
+            // Wait briefly to see if connection succeeds quickly
+            Serial.println("[WiFi] Checking initial connection status...");
+            unsigned long quickCheckStart = millis();
+            while (millis() - quickCheckStart < QUICK_CONNECTION_CHECK) {
+                if (WiFi.status() == WL_CONNECTED) {
+                    delay(300); // Quick verification
+                    
+                    isAPMode = false;
                     isConnected = true;
                     tryingToConnect = false;
+                    connectionFailCount = 0;
+                    lastConnectionCheck = millis();
                     
-                    Serial.println("[WiFi] ✓ Connected during setup!");
+                    Serial.println("[WiFi] ✓ Connected successfully during setup!");
+                    Serial.printf("[WiFi] Connection took %lums\n", millis() - connectionStartTime);
+                    Serial.printf("[WiFi] SSID: %s\n", WiFi.SSID().c_str());
                     Serial.printf("[WiFi] IP: %s\n", WiFi.localIP().toString().c_str());
+                    Serial.printf("[WiFi] Signal: %d dBm\n", WiFi.RSSI());
                     
-                    // Setup mDNS
                     if (MDNS.begin(currentConnectingMDNS.c_str())) {
                         Serial.printf("[WiFi] mDNS: http://%s.local\n", currentConnectingMDNS.c_str());
                     }
                     
-                    Serial.println("[WiFi] ========================================");
-                    setupStartTime = millis();
+                    Serial.println("[WiFi] Ready!");
+                    Serial.printf("[WiFi] Startup completed in %lums\n", millis() - beginStart);
                     return;
                 }
-                
-                // Still trying - brief delay
+                delay(100); // Check every 100ms
+            }
+            
+            // Connection didn't succeed in quick check time
+            // loop() will handle timeout and retry
+            Serial.printf("[WiFi] Initial connection pending, will complete in background (max %lums)\n", CONNECTION_TIMEOUT);
+            Serial.printf("[WiFi] Startup completed in %lums\n", millis() - beginStart);
+            return;
+        }
+        
+        // Network not found, wait briefly and retry once
+        Serial.printf("[WiFi] Network not found, waiting %lums before retry...\n", INITIAL_SCAN_WAIT);
+        delay(INITIAL_SCAN_WAIT); // 3 seconds - quick retry
+        
+        availableNetwork = scanForBestNetwork();
+        if (availableNetwork > 0) {
+            Serial.println("[WiFi] Network found on second scan, connecting...");
+            startConnectionSequence(availableNetwork);
+            
+            // Wait briefly for second attempt too
+            Serial.println("[WiFi] Checking connection status (second attempt)...");
+            unsigned long quickCheckStart = millis(); // Define variable here
+            while (millis() - quickCheckStart < QUICK_CONNECTION_CHECK) {
+                if (WiFi.status() == WL_CONNECTED) {
+                    delay(300);
+                    
+                    isAPMode = false;
+                    isConnected = true;
+                    tryingToConnect = false;
+                    connectionFailCount = 0;
+                    lastConnectionCheck = millis();
+                    
+                    Serial.println("[WiFi] ✓ Connected successfully on retry!");
+                    Serial.printf("[WiFi] Connection took %lums\n", millis() - connectionStartTime);
+                    Serial.printf("[WiFi] SSID: %s\n", WiFi.SSID().c_str());
+                    Serial.printf("[WiFi] IP: %s\n", WiFi.localIP().toString().c_str());
+                    Serial.printf("[WiFi] Signal: %d dBm\n", WiFi.RSSI());
+                    
+                    if (MDNS.begin(currentConnectingMDNS.c_str())) {
+                        Serial.printf("[WiFi] mDNS: http://%s.local\n", currentConnectingMDNS.c_str());
+                    }
+                    
+                    Serial.println("[WiFi] Ready!");
+                    Serial.printf("[WiFi] Startup completed in %lums\n", millis() - beginStart);
+                    return;
+                }
                 delay(100);
             }
             
-            // Timeout - will continue in loop()
-            Serial.println("[WiFi] Connection attempt timeout during setup, will continue in loop()...");
+            Serial.printf("[WiFi] Connection pending, will complete in background\n");
         } else {
-            Serial.println("[WiFi] No saved networks found - will switch to AP mode in loop()");
+            Serial.println("[WiFi] Network still not available, starting AP Mode");
+            switchToAPMode();
         }
         
-        setupStartTime = millis();
-        Serial.println("[WiFi] ========================================");
+        Serial.printf("[WiFi] Startup completed in %lums\n", millis() - beginStart);
     }
     
     void loop() {
@@ -265,27 +369,25 @@ public:
         
         // === CONNECTION LOST - Verify with stability check before recovery ===
         if (isConnected && WiFi.status() != WL_CONNECTED) {
-            // Check periodically to avoid false positives
             if (now - lastConnectionCheck >= CONNECTION_CHECK_INTERVAL) {
                 lastConnectionCheck = now;
                 connectionFailCount++;
                 
-                Serial.printf("[WiFi] ⚠ Connection check failed (%d/3)\n", connectionFailCount);
+                Serial.printf("[WiFi] Connection check failed (%d/3)\n", connectionFailCount);
                 
-                // Only switch to AP mode after 3 consecutive failures (15 seconds)
                 if (connectionFailCount >= 3) {
-                    Serial.println("[WiFi] ✗ Connection permanently lost! Attempting recovery...");
+                    Serial.println("[WiFi] Connection lost, attempting recovery...");
                     
-                    // Try to scan and reconnect before switching to AP mode
-                    if (scanForSavedNetworks()) {
-                        Serial.println("[WiFi] ✓ Network still available, reconnecting...");
+                    int availableNetwork = scanForBestNetwork();
+                    if (availableNetwork > 0) {
                         connectionFailCount = 0;
                         isConnected = false;
-                        startConnectionSequence();
+                        Serial.println("[WiFi] Network found, reconnecting...");
+                        startConnectionSequence(availableNetwork);
                     } else {
-                        Serial.println("[WiFi] ✗ Network not found, switching to AP mode...");
                         connectionFailCount = 0;
                         isConnected = false;
+                        Serial.println("[WiFi] Network not available, switching to AP Mode");
                         switchToAPMode();
                     }
                 }
@@ -295,24 +397,24 @@ public:
         
         // === AP MODE LOGIC (Only when NOT connected) ===
         if (isAPMode) {
-            // Determine scan interval based on how long we've been in AP mode
             unsigned long scanInterval;
             if (now - apModeStartTime < AP_MODE_EARLY_PERIOD) {
-                scanInterval = AP_SCAN_INTERVAL_EARLY;  // 30 seconds for first 5 minutes
+                scanInterval = AP_SCAN_INTERVAL_EARLY;
             } else {
-                scanInterval = AP_SCAN_INTERVAL_NORMAL; // 2 minutes after that
+                scanInterval = AP_SCAN_INTERVAL_NORMAL;
             }
             
-            // Periodic scan for saved networks (ONLY if we have saved credentials)
             if (!primarySSID.isEmpty() || !backupSSID.isEmpty()) {
                 if (now - lastScanTime >= scanInterval) {
                     lastScanTime = now;
                     
-                    Serial.println("[WiFi] [AP Mode] Periodic scan for saved networks...");
-                    
-                    if (scanForSavedNetworks()) {
-                        Serial.println("[WiFi] [AP Mode] Saved network detected! Switching to STA mode...");
-                        startConnectionSequence();
+                    Serial.println("[WiFi] AP Mode: Scanning for saved networks...");
+                    int availableNetwork = scanForBestNetwork();
+                    if (availableNetwork > 0) {
+                        Serial.println("[WiFi] AP Mode: Network found, switching to STA mode");
+                        startConnectionSequence(availableNetwork);
+                    } else {
+                        Serial.println("[WiFi] AP Mode: No saved networks found");
                     }
                 }
             }
@@ -321,45 +423,44 @@ public:
         
         // === STA MODE LOGIC ===
         
-        // Check connection attempt
         if (tryingToConnect) {
             wl_status_t status = WiFi.status();
             
             if (status == WL_CONNECTED) {
-                Serial.println("[WiFi] ========================================");
-                Serial.println("[WiFi] ✓ WIFI CONNECTED!");
-                Serial.printf("[WiFi] IP: %s\n", WiFi.localIP().toString().c_str());
+                // Quick verification - connection already stable due to radio stabilization
+                delay(300); // 300ms verification delay
                 
-                // Setup mDNS
-                if (MDNS.begin(currentConnectingMDNS.c_str())) {
-                    Serial.printf("[WiFi] mDNS: http://%s.local\n", currentConnectingMDNS.c_str());
-                }
-                
-                Serial.println("[WiFi] ========================================");
+                unsigned long connectTime = millis() - connectionStartTime;
                 
                 isAPMode = false;
                 isConnected = true;
                 tryingToConnect = false;
-                connectionFailCount = 0;  // Reset failure counter
+                connectionFailCount = 0;
                 lastConnectionCheck = now;
+                
+                Serial.println("[WiFi] ✓ Connected successfully!");
+                Serial.printf("[WiFi] Connection took %lums\n", connectTime);
+                Serial.printf("[WiFi] SSID: %s\n", WiFi.SSID().c_str());
+                Serial.printf("[WiFi] IP: %s\n", WiFi.localIP().toString().c_str());
+                Serial.printf("[WiFi] Signal: %d dBm\n", WiFi.RSSI());
+                
+                if (MDNS.begin(currentConnectingMDNS.c_str())) {
+                    Serial.printf("[WiFi] mDNS: http://%s.local\n", currentConnectingMDNS.c_str());
+                }
+                
+                Serial.println("[WiFi] Ready!");
+                
                 return;
             }
             
-            // Connection timeout
             if (now - connectionStartTime >= CONNECTION_TIMEOUT) {
-                Serial.println("[WiFi] ✗ Connection timeout");
+                unsigned long tryTime = millis() - connectionStartTime;
+                Serial.printf("[WiFi] ✗ Connection timeout after %lums\n", tryTime);
+                Serial.printf("[WiFi] Status: %d\n", status);
+                
                 WiFi.disconnect();
                 tryingToConnect = false;
-                
-                // Try backup if primary failed
-                if (currentConnectingSSID == primarySSID && !backupSSID.isEmpty()) {
-                    Serial.println("[WiFi] Trying backup network...");
-                    delay(1000);
-                    tryConnect(backupSSID, backupPassword, backupIP, backupMDNS);
-                } else {
-                    Serial.println("[WiFi] All connection attempts failed, switching to AP mode");
-                    switchToAPMode();
-                }
+                switchToAPMode();
             }
             return;
         }
@@ -371,10 +472,6 @@ public:
                           const String& priIP, const String& priMDNS,
                           const String& bkpSSID, const String& bkpPass,
                           const String& bkpIP, const String& bkpMDNS) {
-        
-        Serial.println("[WiFi] ========================================");
-        Serial.println("[WiFi] APPLYING NEW NETWORK SETTINGS");
-        Serial.println("[WiFi] ========================================");
         
         apSSID = apSSIDNew.isEmpty() ? "SmartKraft-To2Do" : apSSIDNew;
         apMDNS = apMDNSNew.isEmpty() ? "to2do" : apMDNSNew;
@@ -389,18 +486,9 @@ public:
         backupIP = bkpIP;
         backupMDNS = bkpMDNS.isEmpty() ? "smartkraft-todo-backup" : bkpMDNS;
         
-        Serial.printf("[WiFi] AP Mode: %s (mDNS: %s.local)\n", apSSID.c_str(), apMDNS.c_str());
-        Serial.printf("[WiFi] Primary: %s\n", primarySSID.c_str());
-        Serial.printf("[WiFi] Backup: %s\n", backupSSID.c_str());
-        
-        // Settings are already saved to persistence by To2Do.ino
-        // Just attempt connection
         if (!primarySSID.isEmpty() || !backupSSID.isEmpty()) {
-            Serial.println("[WiFi] New credentials received, attempting connection...");
             startConnectionSequence();
         }
-        
-        Serial.println("[WiFi] ========================================");
     }
     
     // Load network settings from persistence
@@ -411,7 +499,6 @@ public:
         DeserializationError error = deserializeJson(doc, networkJson);
         
         if (error) {
-            Serial.println("[WiFi] No network settings found in persistence");
             return;
         }
         
@@ -427,15 +514,6 @@ public:
         backupPassword = doc["backupPassword"] | "";
         backupIP = doc["backupIP"] | "";
         backupMDNS = doc["backupMDNS"] | "smartkraft-todo-backup";
-        
-        Serial.println("[WiFi] Network settings loaded from persistence");
-        Serial.printf("[WiFi] AP SSID: %s (mDNS: %s.local)\n", apSSID.c_str(), apMDNS.c_str());
-        if (!primarySSID.isEmpty()) {
-            Serial.printf("[WiFi] Primary SSID: %s\n", primarySSID.c_str());
-        }
-        if (!backupSSID.isEmpty()) {
-            Serial.printf("[WiFi] Backup SSID: %s\n", backupSSID.c_str());
-        }
     }
     
     // Get status as JSON

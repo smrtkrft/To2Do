@@ -7,6 +7,7 @@
 #include "Web_JavaScript_Core.h"
 
 // Ana JavaScript dosyasi - 3 kutuphaneyi birlestirir
+// YUKLENME SIRASI ONEMLI!
 // 1. UI - Arayuz render fonksiyonlari
 // 2. Actions - Butonlar ve popup'lar
 // 3. Core - Veri yonetimi ve server iletisimi
@@ -25,23 +26,9 @@ String getJavaScriptCombined() {
   return combinedJS;
 }
 
-// WARNING: This function returns a reference to a static String.
-// The String persists in memory for the lifetime of the program.
-// Use this only for content that needs to be served repeatedly.
-const String& getJavaScript() {
-  static const String js = getJavaScriptCombined();
-  return js;
+const char* getJavaScript() {
+  static String js = getJavaScriptCombined();
+  return js.c_str();
 }
-
-// Alternative if you need to avoid static storage entirely:
-// const char* getJavaScriptOnce() {
-//   static bool called = false;
-//   static String js = "";
-//   if (!called) {
-//     js = getJavaScriptCombined();
-//     called = true;
-//   }
-//   return js.c_str();
-// }
 
 #endif

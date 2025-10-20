@@ -25,51 +25,24 @@ function hideTaskModal() {
     document.getElementById('task-modal').classList.remove('active');
 }
 
-function showTaskEditModal(taskId) {
+function showEditTaskModal(taskId) {
     const task = app.tasks.find(t => t.id === taskId);
     if (!task) return;
-
-    app.editingTaskId = taskId;
     
-    document.getElementById('edit-modal-task-title').value = task.title;
-    document.getElementById('edit-modal-task-desc').value = task.description || '';
-    document.getElementById('edit-modal-task-type').value = task.type;
-    document.getElementById('edit-modal-task-priority').value = task.priority;
-    document.getElementById('edit-modal-task-date').value = task.date || '';
-    document.getElementById('task-edit-modal').classList.add('active');
-    document.getElementById('edit-modal-task-title').focus();
+    document.getElementById('edit-task-title').value = task.title;
+    document.getElementById('edit-task-desc').value = task.description;
+    document.getElementById('edit-task-type').value = task.type;
+    document.getElementById('edit-task-priority').value = task.priority;
+    document.getElementById('edit-task-date').value = task.date;
+    document.getElementById('edit-task-modal').classList.add('active');
+    document.getElementById('edit-task-title').focus();
+    
+    // Store task ID for saving
+    document.getElementById('edit-task-modal').dataset.taskId = taskId;
 }
 
-function hideTaskEditModal() {
-    document.getElementById('task-edit-modal').classList.remove('active');
-    app.editingTaskId = null;
-}
-
-function updateTask() {
-    const taskId = app.editingTaskId;
-    if (!taskId) return;
-
-    const task = app.tasks.find(t => t.id === taskId);
-    if (!task) return;
-
-    const title = document.getElementById('edit-modal-task-title').value.trim();
-    if (!title) {
-        showToast('TITLE REQUIRED', 'error');
-        return;
-    }
-
-    task.title = title;
-    task.description = document.getElementById('edit-modal-task-desc').value.trim();
-    task.type = document.getElementById('edit-modal-task-type').value;
-    task.priority = document.getElementById('edit-modal-task-priority').value;
-    task.date = document.getElementById('edit-modal-task-date').value;
-
-    hideTaskEditModal();
-    renderTasks();
-    renderProjects();
-    updateStats();
-    showToast('UPDATED');
-    app.saveToServer();
+function hideEditTaskModal() {
+    document.getElementById('edit-task-modal').classList.remove('active');
 }
 
 function showProjectModal() {
@@ -98,6 +71,8 @@ function showSettingsModal() {
     document.getElementById('setting-cat3').value = app.settings.category3;
     document.getElementById('theme-toggle').checked = (app.settings.theme === 'dark');
     
+
+    
     // Load network settings
     loadNetworkSettingsToModal();
     
@@ -112,7 +87,16 @@ function showSettingsModal() {
         updateNetworkInfo();
     }, 5000);
     
-    document.getElementById('settings-modal').classList.add('active');
+    // Open modal with GUI tab active by default
+    const modal = document.getElementById('settings-modal');
+    modal.classList.add('active');
+    
+    // Activate GUI tab
+    document.querySelectorAll('.settings-tab').forEach(t => t.classList.remove('active'));
+    document.querySelector('[data-tab="gui"]')?.classList.add('active');
+    
+    document.querySelectorAll('.settings-tab-content').forEach(c => c.classList.remove('active'));
+    document.querySelector('[data-content="gui"]')?.classList.add('active');
 }
 
 function hideSettingsModal() {
@@ -172,6 +156,36 @@ function createTask() {
     app.saveToServer();
 }
 
+function saveEditedTask() {
+    const taskId = parseInt(document.getElementById('edit-task-modal').dataset.taskId);
+    const task = app.tasks.find(t => t.id === taskId);
+    if (!task) return;
+    
+    const title = document.getElementById('edit-task-title').value.trim();
+    const description = document.getElementById('edit-task-desc').value.trim();
+    const type = document.getElementById('edit-task-type').value;
+    const priority = document.getElementById('edit-task-priority').value;
+    const date = document.getElementById('edit-task-date').value;
+
+    if (!title) {
+        showToast('TITLE REQUIRED', 'error');
+        return;
+    }
+
+    task.title = title;
+    task.description = description;
+    task.type = type;
+    task.priority = priority;
+    task.date = date;
+
+    hideEditTaskModal();
+    renderTasks();
+    renderProjects();
+    updateStats();
+    showToast('TASK UPDATED');
+    app.saveToServer();
+}
+
 function toggleTask(taskId) {
     const task = app.tasks.find(t => t.id === taskId);
     if (task) {
@@ -200,64 +214,25 @@ function deleteTask(taskId) {
     }
 }
 
-function editTaskDate(taskId) {
-    const task = app.tasks.find(t => t.id === taskId);
-    if (!task) return;
-
-    const currentDate = task.date || '';
-    const newDate = prompt('Date (dd.mm.yyyy or leave empty):', currentDate);
-    
-    if (newDate === null) return;
-    
-    task.date = newDate.trim();
-    renderTasks();
-    showToast('DATE UPDATED');
-    app.saveToServer();
-}
+// Inline date editing disabled - use edit modal instead
+// function editTaskDate(taskId) {
+//     const task = app.tasks.find(t => t.id === taskId);
+//     if (!task) return;
+//
+//     const currentDate = task.date || '';
+//     const newDate = prompt('Date (dd.mm.yyyy or leave empty):', currentDate);
+//     
+//     if (newDate === null) return;
+//     
+//     task.date = newDate.trim();
+//     renderTasks();
+//     showToast('DATE UPDATED');
+//     app.saveToServer();
+// }
 
 function startInlineEdit(taskId, field, element) {
-    const task = app.tasks.find(t => t.id === taskId);
-    if (!task || app.editingTask) return;
-
-    app.editingTask = { id: taskId, field, element };
-    const originalValue = task[field];
-
-    element.contentEditable = true;
-    element.classList.add('editing');
-    element.focus();
-    
-    const range = document.createRange();
-    range.selectNodeContents(element);
-    const selection = window.getSelection();
-    selection.removeAllRanges();
-    selection.addRange(range);
-
-    const finishEdit = () => {
-        const newValue = element.textContent.trim();
-        element.contentEditable = false;
-        element.classList.remove('editing');
-        
-        if (newValue && newValue !== originalValue) {
-            task[field] = newValue;
-            showToast('UPDATED');
-            app.saveToServer();
-        } else {
-            element.textContent = originalValue;
-        }
-        
-        app.editingTask = null;
-    };
-
-    element.addEventListener('blur', finishEdit, { once: true });
-    element.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            element.blur();
-        } else if (e.key === 'Escape') {
-            element.textContent = originalValue;
-            element.blur();
-        }
-    }, { once: true });
+    // Inline editing disabled - use edit modal instead
+    return;
 }
 
 // ==================== CHECKLIST ACTIONS ====================
@@ -529,34 +504,55 @@ function handleContextAction(action, projectId) {
 // ==================== SETTINGS ACTIONS ====================
 
 async function saveSettings() {
+    // Show immediate feedback
+    showToast('KAYDEDILIYOR...');
+    
     app.settings.appTitle = document.getElementById('setting-app-title').value.trim() || 'ToDo - SmartKraft';
     app.settings.category1 = document.getElementById('setting-cat1').value.trim() || 'WORK';
     app.settings.category2 = document.getElementById('setting-cat2').value.trim() || 'PERSONAL';
     app.settings.category3 = document.getElementById('setting-cat3').value.trim() || 'PROJECTS';
     app.settings.theme = document.getElementById('theme-toggle').checked ? 'dark' : 'light';
     
-    app.networkSettings.apSSID = document.getElementById('setting-ap-ssid')?.value.trim() || 'SmartKraft-ToDo';
-    app.networkSettings.apMDNS = document.getElementById('setting-ap-mdns')?.value.trim() || 'smartkraft-todo';
-    app.networkSettings.primarySSID = document.getElementById('setting-primary-ssid')?.value.trim() || '';
-    app.networkSettings.primaryPassword = document.getElementById('setting-primary-password')?.value || '';
-    app.networkSettings.primaryIP = document.getElementById('setting-primary-ip')?.value.trim() || '';
-    app.networkSettings.primaryMDNS = document.getElementById('setting-primary-mdns')?.value.trim() || 'smartkraft-todo';
-    app.networkSettings.backupSSID = document.getElementById('setting-backup-ssid')?.value.trim() || '';
-    app.networkSettings.backupPassword = document.getElementById('setting-backup-password')?.value || '';
-    app.networkSettings.backupIP = document.getElementById('setting-backup-ip')?.value.trim() || '';
-    app.networkSettings.backupMDNS = document.getElementById('setting-backup-mdns')?.value.trim() || 'smartkraft-todo-backup';
+    // Only collect network settings if they exist (may not be on GUI tab)
+    const hasNetworkSettings = document.getElementById('setting-ap-ssid');
     
+    if (hasNetworkSettings) {
+        app.networkSettings.apSSID = document.getElementById('setting-ap-ssid')?.value.trim() || 'SmartKraft-ToDo';
+        app.networkSettings.apMDNS = document.getElementById('setting-ap-mdns')?.value.trim() || 'smartkraft-todo';
+        app.networkSettings.primarySSID = document.getElementById('setting-primary-ssid')?.value.trim() || '';
+        app.networkSettings.primaryPassword = document.getElementById('setting-primary-password')?.value || '';
+        app.networkSettings.primaryIP = document.getElementById('setting-primary-ip')?.value.trim() || '';
+        app.networkSettings.primaryMDNS = document.getElementById('setting-primary-mdns')?.value.trim() || 'smartkraft-todo';
+        app.networkSettings.backupSSID = document.getElementById('setting-backup-ssid')?.value.trim() || '';
+        app.networkSettings.backupPassword = document.getElementById('setting-backup-password')?.value || '';
+        app.networkSettings.backupIP = document.getElementById('setting-backup-ip')?.value.trim() || '';
+        app.networkSettings.backupMDNS = document.getElementById('setting-backup-mdns')?.value.trim() || 'smartkraft-todo-backup';
+        localStorage.setItem('networkSettings', JSON.stringify(app.networkSettings));
+    }
+    
+    // Save to localStorage immediately (instant)
     localStorage.setItem('todoSettings', JSON.stringify(app.settings));
-    localStorage.setItem('networkSettings', JSON.stringify(app.networkSettings));
     
+    // Apply settings immediately (instant)
     applySettings();
     
-    showToast('SETTINGS SAVED');
+    // Show success and close modal immediately
+    showToast('AYARLAR KAYDEDILDI');
     hideSettingsModal();
     
-    // Save to server in background (non-blocking)
-    app.saveSettingsToServer().catch(err => console.error('Settings save error:', err));
-    app.saveNetworkSettings().catch(err => console.error('Network settings save error:', err));
+    // Save to server in background (don't wait for it)
+    if (hasNetworkSettings) {
+        Promise.all([
+            app.saveSettingsToServer(),
+            app.saveNetworkSettings()
+        ]).catch(error => {
+            console.error('Background save error:', error);
+        });
+    } else {
+        app.saveSettingsToServer().catch(error => {
+            console.error('Background save error:', error);
+        });
+    }
 }
 
 function loadNetworkSettingsToModal() {
@@ -599,6 +595,7 @@ async function testWiFiConnection(type) {
         const response = await fetch('/api/network/test', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
             body: JSON.stringify({ type, ssid })
         });
         
@@ -647,17 +644,17 @@ function bindTaskEvents() {
         });
     });
 
+    container.querySelectorAll('.task-action-btn.edit').forEach(el => {
+        el.addEventListener('click', () => {
+            const taskId = parseInt(el.dataset.taskId);
+            showEditTaskModal(taskId);
+        });
+    });
+
     container.querySelectorAll('.task-action-btn.delete').forEach(el => {
         el.addEventListener('click', () => {
             const taskId = parseInt(el.dataset.taskId);
             deleteTask(taskId);
-        });
-    });
-
-    container.querySelectorAll('.task-action-btn.edit').forEach(el => {
-        el.addEventListener('click', () => {
-            const taskId = parseInt(el.dataset.taskId);
-            showTaskEditModal(taskId);
         });
     });
 
@@ -683,6 +680,14 @@ function bindTaskEvents() {
             removeChecklistItem(taskId, checklistId);
         });
     });
+
+    // Date click removed - use edit button instead
+    // container.querySelectorAll('.task-date-display').forEach(el => {
+    //     el.addEventListener('click', () => {
+    //         const taskId = parseInt(el.dataset.taskId);
+    //         editTaskDate(taskId);
+    //     });
+    // });
 }
 )XJSACTX";
 }

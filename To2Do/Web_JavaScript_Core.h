@@ -14,9 +14,9 @@ class WorkspaceFinal {
         this.currentFilter = 'all';
         this.nextProjectId = 1;
         this.nextTaskId = 1;
-        this.editingTask = null;
-        this.editingTaskId = null;
         this.networkStatusInterval = null;
+        
+
         
         // Settings
         this.settings = {
@@ -44,20 +44,31 @@ class WorkspaceFinal {
         this.init();
     }
 
+
+
     async init() {
         await this.loadSettingsFromServer();
         applySettings();
         await this.loadFromServer();
-        this.bindEvents();
-        renderProjects();
-        updateStats();
+        
+        // Force render after data is loaded
+        setTimeout(() => {
+            this.bindEvents();
+            renderProjects();
+            updateStats();
+            
+            // Auto-select first project if exists
+            if (this.projects.length > 0 && !this.currentProject) {
+                this.selectProject(this.projects[0].id);
+            }
+        }, 100);
     }
 
     // ==================== DATA PERSISTENCE ====================
 
     async loadFromServer() {
         try {
-            const response = await fetch('/api/todos');
+            const response = await fetch('/api/todos', {credentials: 'include'});
             
             if (!response.ok) {
                 console.error('Failed to load todos from server:', response.status);
@@ -100,6 +111,7 @@ class WorkspaceFinal {
             const response = await fetch('/api/todos', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
                 body: JSON.stringify(data)
             });
             
@@ -122,6 +134,7 @@ class WorkspaceFinal {
             const response = await fetch('/api/settings', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
                 body: JSON.stringify(this.settings)
             });
             
@@ -138,7 +151,7 @@ class WorkspaceFinal {
     async loadSettingsFromServer() {
         try {
             // Load GUI settings
-            const settingsResponse = await fetch('/api/settings');
+            const settingsResponse = await fetch('/api/settings', {credentials: 'include'});
             if (settingsResponse.ok) {
                 const data = await settingsResponse.json();
                 this.settings = {
@@ -151,7 +164,7 @@ class WorkspaceFinal {
             }
             
             // Load network settings
-            const networkResponse = await fetch('/api/network/settings');
+            const networkResponse = await fetch('/api/network/settings', {credentials: 'include'});
             if (networkResponse.ok) {
                 const networkData = await networkResponse.json();
                 this.networkSettings = {
@@ -195,6 +208,7 @@ class WorkspaceFinal {
             const response = await fetch('/api/network/config', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
                 body: JSON.stringify(this.networkSettings)
             });
             
@@ -217,7 +231,7 @@ class WorkspaceFinal {
         const checkConnection = setInterval(() => {
             attempts++;
             
-            fetch('/api/network/status')
+            fetch('/api/network/status', {credentials: 'include'})
                 .then(response => response.json())
                 .then(data => {
                     if (data.mode === 'STA' && data.connected) {
@@ -274,7 +288,8 @@ class WorkspaceFinal {
         
         try {
             const response = await fetch('/api/factory-reset', {
-                method: 'POST'
+                method: 'POST',
+                credentials: 'include'
             });
             
             if (response.ok) {
@@ -347,19 +362,6 @@ class WorkspaceFinal {
             createTask();
         });
 
-        // Task edit modal
-        document.getElementById('edit-modal-task-cancel').addEventListener('click', () => {
-            hideTaskEditModal();
-        });
-
-        document.getElementById('edit-modal-task-update').addEventListener('click', () => {
-            updateTask();
-        });
-
-        document.getElementById('task-edit-modal').addEventListener('click', (e) => {
-            if (e.target.id === 'task-edit-modal') hideTaskEditModal();
-        });
-
         // Project modal buttons
         document.getElementById('modal-project-cancel').addEventListener('click', () => {
             hideProjectModal();
@@ -373,9 +375,22 @@ class WorkspaceFinal {
             updateProject();
         });
 
+        // Edit task modal buttons
+        document.getElementById('edit-task-cancel').addEventListener('click', () => {
+            hideEditTaskModal();
+        });
+        
+        document.getElementById('edit-task-save').addEventListener('click', () => {
+            saveEditedTask();
+        });
+
         // Close modals on outside click
         document.getElementById('task-modal').addEventListener('click', (e) => {
             if (e.target.id === 'task-modal') hideTaskModal();
+        });
+
+        document.getElementById('edit-task-modal').addEventListener('click', (e) => {
+            if (e.target.id === 'edit-task-modal') hideEditTaskModal();
         });
 
         document.getElementById('project-modal').addEventListener('click', (e) => {

@@ -30,44 +30,17 @@ public:
     // ==================== INITIALIZATION ====================
     
     bool begin() {
-        Serial.println("[DataManager] ========================================");
-        Serial.println("[DataManager] Initializing...");
-        Serial.println("[DataManager] ========================================");
-        
         if (!SPIFFS.begin(true)) {
-            Serial.println("[DataManager] ERROR: SPIFFS mount failed!");
             return false;
         }
         
-        Serial.println("[DataManager] ✓ SPIFFS mounted successfully");
-        
-        // Check if data file exists
         if (SPIFFS.exists(DATA_FILE)) {
-            Serial.printf("[DataManager] ✓ Found existing file: %s\n", DATA_FILE);
-            
-            // Get file size
-            File f = SPIFFS.open(DATA_FILE, "r");
-            if (f) {
-                Serial.printf("[DataManager] File size: %d bytes\n", f.size());
-                f.close();
-            }
-            
-            Serial.println("[DataManager] Loading existing user data...");
             if (loadFromFile()) {
-                Serial.println("[DataManager] ✓ User data loaded successfully");
                 return true;
-            } else {
-                Serial.println("[DataManager] ✗ ERROR: Failed to load user data, using defaults");
             }
-        } else {
-            Serial.printf("[DataManager] ✗ File not found: %s\n", DATA_FILE);
-            Serial.println("[DataManager] Creating default structure with demo content...");
         }
         
-        // Create default data with demo content
-        Serial.println("[DataManager] Loading demo content...");
         resetToDefaults();
-        Serial.println("[DataManager] Saving demo content to SPIFFS...");
         saveToFile();
         
         return true;
@@ -78,52 +51,29 @@ public:
     bool loadFromFile() {
         File file = SPIFFS.open(DATA_FILE, "r");
         if (!file) {
-            Serial.println("[DataManager] ERROR: Cannot open data file for reading");
             return false;
         }
-        
-        size_t fileSize = file.size();
         
         DeserializationError error = deserializeJson(userData, file);
         file.close();
         
         if (error) {
-            Serial.printf("[DataManager] ERROR: JSON parsing failed: %s\n", error.c_str());
             return false;
         }
         
-        int projectCount = userData["projects"].size();
-        int taskCount = userData["tasks"].size();
-        
-        Serial.printf("[DataManager] ✓ Loaded %d bytes from %s (%d projects, %d tasks)\n", 
-                      fileSize, DATA_FILE, projectCount, taskCount);
         return true;
     }
     
     bool saveToFile() {
-        // Count current data before saving
-        int projectCount = userData["projects"].size();
-        int taskCount = userData["tasks"].size();
-        
-        Serial.printf("[DataManager] saveToFile: Attempting to save %d projects, %d tasks\n", 
-                      projectCount, taskCount);
-        
         File file = SPIFFS.open(DATA_FILE, "w");
         if (!file) {
-            Serial.println("[DataManager] ERROR: Cannot open data file for writing");
             return false;
         }
         
         size_t bytesWritten = serializeJson(userData, file);
         file.close();
         
-        if (bytesWritten == 0) {
-            Serial.println("[DataManager] ERROR: Failed to write data");
-            return false;
-        }
-        
-        Serial.printf("[DataManager] ✓ Saved %d bytes to %s\n", bytesWritten, DATA_FILE);
-        return true;
+        return (bytesWritten > 0);
     }
     
     // ==================== DATA ACCESS ====================
@@ -141,7 +91,6 @@ public:
         DeserializationError error = deserializeJson(newDoc, jsonString);
         
         if (error) {
-            Serial.printf("[DataManager] ERROR: Invalid JSON: %s\n", error.c_str());
             return false;
         }
         
@@ -174,14 +123,7 @@ public:
         doc["projects"] = root["projects"];
         doc["tasks"] = root["tasks"];
         
-        int projectCount = root["projects"].size();
-        int taskCount = root["tasks"].size();
-        
         serializeJson(doc, output);
-        
-        Serial.printf("[DataManager] getTodosData: Returning %d projects, %d tasks (%d bytes)\n", 
-                      projectCount, taskCount, output.length());
-        
         return output;
     }
     
@@ -191,33 +133,17 @@ public:
         DeserializationError error = deserializeJson(doc, jsonString);
         
         if (error) {
-            Serial.printf("[DataManager] ERROR: Invalid todos JSON: %s\n", error.c_str());
             return false;
         }
         
-        // Validate data structure
         if (!doc.containsKey("projects") || !doc.containsKey("tasks")) {
-            Serial.println("[DataManager] ERROR: Missing projects or tasks in JSON");
             return false;
         }
         
-        // Count items
-        int projectCount = doc["projects"].size();
-        int taskCount = doc["tasks"].size();
-        Serial.printf("[DataManager] Updating: %d projects, %d tasks\n", projectCount, taskCount);
-        
-        // Update only projects and tasks, keep settings intact
         userData["projects"] = doc["projects"];
         userData["tasks"] = doc["tasks"];
         
-        bool success = saveToFile();
-        if (success) {
-            Serial.println("[DataManager] ✓ Todos saved to SPIFFS");
-        } else {
-            Serial.println("[DataManager] ✗ Failed to save todos to SPIFFS");
-        }
-        
-        return success;
+        return saveToFile();
     }
     
     // Get GUI settings as JSON string
@@ -234,11 +160,9 @@ public:
         DeserializationError error = deserializeJson(doc, jsonString);
         
         if (error) {
-            Serial.printf("[DataManager] ERROR: Invalid settings JSON: %s\n", error.c_str());
             return false;
         }
         
-        // Update settings object
         JsonObject settings = userData["settings"].as<JsonObject>();
         for (JsonPair kv : doc.as<JsonObject>()) {
             settings[kv.key()] = kv.value();
@@ -261,48 +185,36 @@ public:
         DeserializationError error = deserializeJson(doc, jsonString);
         
         if (error) {
-            Serial.printf("[DataManager] ERROR: Invalid network JSON: %s\n", error.c_str());
             return false;
         }
         
-        // Update network object
         JsonObject network = userData["network"].as<JsonObject>();
         for (JsonPair kv : doc.as<JsonObject>()) {
             network[kv.key()] = kv.value();
         }
         
-        Serial.println("[DataManager] Network settings updated in memory");
+        return true;
         return saveToFile();
     }
+    
+
     
     // ==================== FACTORY RESET ====================
     
     bool factoryReset() {
-        Serial.println("[DataManager] ================================");
-        Serial.println("[DataManager] PERFORMING FACTORY RESET");
-        Serial.println("[DataManager] ================================");
-        
-        // Delete user data file
         if (SPIFFS.exists(DATA_FILE)) {
-            if (SPIFFS.remove(DATA_FILE)) {
-                Serial.printf("[DataManager] Deleted %s\n", DATA_FILE);
-            } else {
-                Serial.printf("[DataManager] ERROR: Failed to delete %s\n", DATA_FILE);
+            if (!SPIFFS.remove(DATA_FILE)) {
                 return false;
             }
         }
         
-        // Reset to demo content
+
+        
         resetToDefaults();
         
-        // Save demo content
         if (!saveToFile()) {
-            Serial.println("[DataManager] ERROR: Failed to save default data");
             return false;
         }
-        
-        Serial.println("[DataManager] Factory reset completed successfully");
-        Serial.println("[DataManager] ================================");
         
         return true;
     }
@@ -322,8 +234,8 @@ public:
         
         // Network Settings
         JsonObject network = userData.createNestedObject("network");
-        network["apSSID"] = "SmartKraft-ToDo";
-        network["apMDNS"] = "smartkraft-todo";
+        network["apSSID"] = "SmartKraft-To2Do";
+        network["apMDNS"] = "to2do";
         network["primarySSID"] = "";
         network["primaryPassword"] = "";
         network["primaryIP"] = "";
@@ -332,6 +244,8 @@ public:
         network["backupPassword"] = "";
         network["backupIP"] = "";
         network["backupMDNS"] = "smartkraft-todo-backup";
+        
+
         
         // Demo Projects
         JsonArray projects = userData.createNestedArray("projects");
@@ -462,28 +376,6 @@ public:
         t5_c2["text"] = "Mount sensors in rooms";
         t5_c2["completed"] = false;
         t5.createNestedArray("dependencies");
-        
-        Serial.println("[DataManager] Default data structure created with demo content");
-    }
-    
-    // ==================== UTILITY ====================
-    
-    void printStatus() {
-        Serial.println("[DataManager] === Status ===");
-        Serial.printf("Data file: %s\n", DATA_FILE);
-        Serial.printf("File exists: %s\n", SPIFFS.exists(DATA_FILE) ? "YES" : "NO");
-        
-        if (SPIFFS.exists(DATA_FILE)) {
-            File file = SPIFFS.open(DATA_FILE, "r");
-            if (file) {
-                Serial.printf("File size: %d bytes\n", file.size());
-                file.close();
-            }
-        }
-        
-        Serial.printf("Projects: %d\n", userData["projects"].size());
-        Serial.printf("Tasks: %d\n", userData["tasks"].size());
-        Serial.println("[DataManager] ==============");
     }
 };
 
