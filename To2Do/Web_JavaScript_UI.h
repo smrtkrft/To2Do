@@ -281,7 +281,7 @@ function updateNetworkInfo() {
             }
             
             if (infoMDNS) {
-                infoMDNS.textContent = data.mdns || 'smartkraft-todo.local';
+                infoMDNS.textContent = data.mdns || 'smartkraft-to2do.local';
             }
             
             // CONNECTION tab - Accordion statuses
@@ -344,7 +344,7 @@ function updateNetworkInfo() {
             
             if (infoWiFi) infoWiFi.textContent = 'AP Mode';
             if (infoIP) infoIP.textContent = '192.168.4.1';
-            if (infoMDNS) infoMDNS.textContent = 'smartkraft-todo.local';
+            if (infoMDNS) infoMDNS.textContent = 'smartkraft-to2do.local';
             
             const apStatus = document.getElementById('ap-status');
             if (apStatus) {

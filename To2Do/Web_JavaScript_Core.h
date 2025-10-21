@@ -20,7 +20,7 @@ class WorkspaceFinal {
         
         // Settings
         this.settings = {
-            appTitle: 'ToDo - SmartKraft',
+            appTitle: 'To2Do - SmartKraft',
             category1: 'WORK',
             category2: 'PERSONAL',
             category3: 'PROJECTS',
@@ -29,16 +29,16 @@ class WorkspaceFinal {
         
         // Network settings
         this.networkSettings = {
-            apSSID: 'SmartKraft-ToDo',
-            apMDNS: 'smartkraft-todo',
+            apSSID: 'SmartKraft-To2Do',
+            apMDNS: 'smartkraft-to2do',
             primarySSID: '',
             primaryPassword: '',
             primaryIP: '',
-            primaryMDNS: 'smartkraft-todo',
+            primaryMDNS: 'smartkraft-to2do',
             backupSSID: '',
             backupPassword: '',
             backupIP: '',
-            backupMDNS: 'smartkraft-todo-backup'
+            backupMDNS: 'smartkraft-to2do-backup'
         };
         
         this.init();
@@ -182,7 +182,7 @@ class WorkspaceFinal {
     }
     
     loadSettingsFromLocalStorage() {
-        const saved = localStorage.getItem('todoSettings');
+    const saved = localStorage.getItem('to2doSettings');
         if (saved) {
             try {
                 this.settings = JSON.parse(saved);
@@ -462,15 +462,15 @@ class WorkspaceFinal {
 
         // mDNS preview updates
         document.getElementById('setting-ap-mdns')?.addEventListener('input', (e) => {
-            document.getElementById('ap-mdns-preview').textContent = e.target.value || 'smartkraft-todo';
+            document.getElementById('ap-mdns-preview').textContent = e.target.value || 'smartkraft-to2do';
         });
 
         document.getElementById('setting-primary-mdns')?.addEventListener('input', (e) => {
-            document.getElementById('primary-mdns-preview').textContent = e.target.value || 'smartkraft-todo';
+            document.getElementById('primary-mdns-preview').textContent = e.target.value || 'smartkraft-to2do';
         });
 
         document.getElementById('setting-backup-mdns')?.addEventListener('input', (e) => {
-            document.getElementById('backup-mdns-preview').textContent = e.target.value || 'smartkraft-todo-backup';
+            document.getElementById('backup-mdns-preview').textContent = e.target.value || 'smartkraft-to2do-backup';
         });
 
         // Test connection buttons

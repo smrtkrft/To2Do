@@ -4,6 +4,7 @@
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
+#include <esp_task_wdt.h>  // Watchdog timer for safety
 
 // Pin Definitions
 #define OLED_SDA 22        // D4
@@ -26,6 +27,12 @@ private:
   bool lastButtonState;
   uint8_t oledAddress;
   bool displayFound;
+  
+  // Auto-recovery system
+  unsigned long lastRecoveryAttempt;
+  uint8_t recoveryAttemptCount;
+  static constexpr unsigned long RECOVERY_INTERVAL = 10000; // Try recovery every 10 seconds
+  static constexpr uint8_t MAX_RECOVERY_ATTEMPTS = 5;       // Max 5 attempts before giving up
   
   // Task counts
   int todayCount;
@@ -51,10 +58,12 @@ public:
       lastButtonState(HIGH),
       oledAddress(0x3C),
       displayFound(false),
+      lastRecoveryAttempt(0),
+      recoveryAttemptCount(0),
       todayCount(0),
       tomorrowCount(0),
       weekCount(0),
-      appTitle("ToDo-SmartKraft"),
+      appTitle("To2Do-SmartKraft"),
       networkSSID(""),
       networkIP(""),
       networkLocal(""),
@@ -62,61 +71,108 @@ public:
   }
   
   bool begin() {
-    // Initialize I2C immediately
     Wire.begin(OLED_SDA, OLED_SCL);
+    Wire.setClock(100000);
+    Wire.setTimeOut(250);
     delay(100);
     
-    // Try common OLED addresses
-    uint8_t addresses[] = {0x3C, 0x3D};
-    for (uint8_t addr : addresses) {
-      if (display.begin(SSD1306_SWITCHCAPVCC, addr)) {
-        oledAddress = addr;
-        displayFound = true;
-        break;
-      }
-    }
+    Wire.beginTransmission(0x3C);
+    delayMicroseconds(100);
+    uint8_t error3C = Wire.endTransmission();
     
-    if (!displayFound) {
+    Wire.beginTransmission(0x3D);
+    delayMicroseconds(100);
+    uint8_t error3D = Wire.endTransmission();
+    
+    if (error3C != 0 && error3D != 0) {
+      Serial.println("[Display] ✗ OLED not found");
+      displayFound = false;
+      lastRecoveryAttempt = millis();
+      recoveryAttemptCount = 0;
       return false;
     }
     
-    // Extra initialization for stability
-    display.clearDisplay();
-    display.display();
-    delay(100);
+    uint8_t targetAddr = (error3C == 0) ? 0x3C : 0x3D;
     
-    // Set max brightness
+    unsigned long initStart = millis();
+    bool initSuccess = false;
+    
+    while (millis() - initStart < 1000) {
+      if (display.begin(SSD1306_SWITCHCAPVCC, targetAddr, false)) {
+        initSuccess = true;
+        break;
+      }
+      delay(50);
+    }
+    
+    if (!initSuccess) {
+      Serial.println("[Display] ✗ Init timeout");
+      displayFound = false;
+      lastRecoveryAttempt = millis();
+      recoveryAttemptCount = 0;
+      return false;
+    }
+    
+    oledAddress = targetAddr;
+    displayFound = true;
+    
+    opStart = millis();
+    display.clearDisplay();
+    if (millis() - opStart > 300) {
+      displayFound = false;
+      return false;
+    }
+    
+    opStart = millis();
+    display.display();
+    if (millis() - opStart > 300) {
+      displayFound = false;
+      return false;
+    }
+    
+    delay(50);
+    
     display.ssd1306_command(SSD1306_SETCONTRAST);
     display.ssd1306_command(255);
     
-    // Initialize button
     pinMode(BUTTON_PIN, INPUT_PULLUP);
-    
-    // Show SmartKraft splash screen immediately
     showSplashScreen();
     
     return true;
   }
   
   void showSplashScreen() {
-    systemReady = false;
-    display.clearDisplay();
-    display.setTextColor(SSD1306_WHITE);
+    if (!displayFound) return;
     
-    // "SmartKraft" büyük (size 2) - üstte
+    systemReady = false;
+    unsigned long opStart;
+    
+    opStart = millis();
+    display.clearDisplay();
+    if (millis() - opStart > 300) {
+      displayFound = false;
+      lastRecoveryAttempt = millis();
+      return;
+    }
+    
+    display.setTextColor(SSD1306_WHITE);
     display.setTextSize(2);
-    int16_t x1 = (SCREEN_WIDTH - (10 * 12)) / 2; // 10 karakter * 12 piksel (size 2)
+    int16_t x1 = (SCREEN_WIDTH - (10 * 12)) / 2;
     display.setCursor(x1, 4);
     display.println("SmartKraft");
     
-    // "To2Do" küçük (size 1) - altta, ortalanmış
     display.setTextSize(1);
-    int16_t x2 = (SCREEN_WIDTH - (5 * 6)) / 2; // 5 karakter * 6 piksel (size 1)
+    int16_t x2 = (SCREEN_WIDTH - (5 * 6)) / 2;
     display.setCursor(x2, 22);
     display.println("To2Do");
     
+    opStart = millis();
     display.display();
-    Serial.println("[Display] Splash screen shown - waiting for system ready...");
+    if (millis() - opStart > 300) {
+      displayFound = false;
+      lastRecoveryAttempt = millis();
+      return;
+    }
   }
   
   void setAppTitle(const char* title) {
@@ -124,11 +180,9 @@ public:
   }
   
   void setSystemReady() {
-    // Called when all data is loaded - switch to app title page
     systemReady = true;
-    currentPage = 0; // Start at app title page
+    currentPage = 0;
     updateDisplay();
-    Serial.println("[Display] System ready! Showing app title page.");
   }
   
   void setTaskCounts(int today, int tomorrow, int week) {
@@ -144,31 +198,79 @@ public:
   }
   
   void loop() {
-    if (!displayFound) return;
+    // Auto-recovery
+    if (!displayFound && recoveryAttemptCount < MAX_RECOVERY_ATTEMPTS) {
+      unsigned long now = millis();
+      if (now - lastRecoveryAttempt >= RECOVERY_INTERVAL) {
+        lastRecoveryAttempt = now;
+        recoveryAttemptCount++;
+        
+        if (attemptRecovery()) {
+          Serial.println("[Display] ✓ OLED recovered");
+          recoveryAttemptCount = 0;
+          
+          if (systemReady) {
+            updateDisplay();
+          } else {
+            showSplashScreen();
+          }
+        }
+      }
+      return;
+    }
     
-    // Check button press
+    if (!displayFound) return;
     checkButton();
   }
   
+  bool attemptRecovery() {
+    // Quick recovery with hard timeout
+    Wire.begin(OLED_SDA, OLED_SCL);
+    Wire.setClock(100000);
+    Wire.setTimeOut(250); // Aggressive timeout
+    delay(50);
+    
+    // Quick device detection with timeout
+    unsigned long start = millis();
+    Wire.beginTransmission(oledAddress);
+    delayMicroseconds(100);
+    uint8_t error = Wire.endTransmission();
+    
+    if (millis() - start > 200 || error != 0) {
+      return false; // Timeout or device not responding
+    }
+    
+    // Try to reinitialize display with timeout
+    start = millis();
+    bool initOk = display.begin(SSD1306_SWITCHCAPVCC, oledAddress, false);
+    
+    if (!initOk || (millis() - start > 500)) {
+      return false; // Init failed or too slow
+    }
+    
+    // Test display with timeout
+    start = millis();
+    display.clearDisplay();
+    if (millis() - start > 200) return false;
+    
+    start = millis();
+    display.display();
+    if (millis() - start > 200) return false;
+    
+    displayFound = true;
+    return true;
+  }
+  
   void checkButton() {
-    // Don't respond to button until system is ready
     if (!systemReady) return;
     
     bool buttonState = digitalRead(BUTTON_PIN);
     unsigned long currentTime = millis();
     
-    // Detect button press (LOW = pressed with pull-up)
     if (buttonState == LOW && lastButtonState == HIGH) {
-      // Debounce check
       if (currentTime - lastButtonPress > DEBOUNCE_DELAY) {
         lastButtonPress = currentTime;
-        
-        Serial.println("Buton basildi");
-        Serial.println("\n");
-        
         nextPage();
-        
-        // 500ms delay to prevent rapid switching
         delay(500);
       }
     }
@@ -190,10 +292,19 @@ public:
   }
   
   void updateDisplay() {
-    // Clear display first
-    display.clearDisplay();
+    if (!displayFound) return;
     
-    // Draw page content
+    unsigned long opStart;
+    
+    opStart = millis();
+    display.clearDisplay();
+    if (millis() - opStart > 300) {
+      displayFound = false;
+      lastRecoveryAttempt = millis();
+      recoveryAttemptCount = 0;
+      return;
+    }
+    
     switch (currentPage) {
       case 0:
         drawAppTitle();
@@ -212,8 +323,14 @@ public:
         break;
     }
     
-    // Push to display
+    opStart = millis();
     display.display();
+    if (millis() - opStart > 300) {
+      displayFound = false;
+      lastRecoveryAttempt = millis();
+      recoveryAttemptCount = 0;
+      return;
+    }
   }
   
   void drawAppTitle() {

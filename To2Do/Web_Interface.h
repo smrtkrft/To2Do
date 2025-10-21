@@ -10,14 +10,14 @@ const char* getHTML() {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title id="page-title">ToDo - SmartKraft</title>
+<title id="page-title">To2Do - SmartKraft</title>
 <link rel="stylesheet" href="/app.css">
 </head>
 <body>
 <div class="workspace">
 <div class="sidebar">
 <div class="sidebar-header">
-<div class="sidebar-title" id="app-title">ToDo - SmartKraft</div>
+<div class="sidebar-title" id="app-title">To2Do - SmartKraft</div>
 <div class="sidebar-stats">
 <div class="stat"><div class="stat-value" id="total-tasks">0</div><div class="stat-label">TOPLAM</div></div>
 <div class="stat"><div class="stat-value" id="active-tasks">0</div><div class="stat-label">AKTIF</div></div>
@@ -135,7 +135,6 @@ const char* getHTML() {
 <div class="settings-tabs">
 <button class="settings-tab active" data-tab="gui">GUI</button>
 <button class="settings-tab" data-tab="connection">BAGLANTI</button>
-<button class="settings-tab" data-tab="mail">MAIL</button>
 <button class="settings-tab" data-tab="info">INFO</button>
 </div>
 <div class="settings-content">
@@ -153,7 +152,7 @@ const char* getHTML() {
 </div>
 <div class="settings-section">
 <label class="settings-label">UYGULAMA BASLIGI</label>
-<input type="text" class="settings-input" id="setting-app-title" placeholder="ToDo - SmartKraft">
+<input type="text" class="settings-input" id="setting-app-title" placeholder="To2Do - SmartKraft">
 </div>
 <div class="settings-section">
 <label class="settings-label">KATEGORI ISIMLERI</label>
@@ -186,13 +185,13 @@ const char* getHTML() {
 <div class="accordion-content active" data-content="ap-mode">
 <div class="settings-section">
 <label class="settings-label">AP SSID (Access Point Name)</label>
-<input type="text" class="settings-input" id="setting-ap-ssid" placeholder="SmartKraft-ToDo" value="SmartKraft-ToDo">
+            <input type="text" class="settings-input" id="setting-ap-ssid" placeholder="SmartKraft-To2Do" value="SmartKraft-To2Do">
 <p class="settings-hint">No password required. Open network for easy first-time setup.</p>
 </div>
 <div class="settings-section">
 <label class="settings-label">mDNS HOSTNAME (AP Mode)</label>
-<input type="text" class="settings-input" id="setting-ap-mdns" placeholder="smartkraft-todo" value="smartkraft-todo">
-<p class="settings-hint">Access via: http://<span id="ap-mdns-preview">smartkraft-todo</span>.local</p>
+            <input type="text" class="settings-input" id="setting-ap-mdns" placeholder="smartkraft-to2do" value="smartkraft-to2do">
+            <p class="settings-hint">Access via: http://<span id="ap-mdns-preview">smartkraft-to2do</span>.local</p>
 </div>
 </div>
 </div>
@@ -221,8 +220,8 @@ const char* getHTML() {
 </div>
 <div class="settings-section">
 <label class="settings-label">mDNS HOSTNAME</label>
-<input type="text" class="settings-input" id="setting-primary-mdns" placeholder="smartkraft-todo">
-<p class="settings-hint">Access via: http://<span id="primary-mdns-preview">smartkraft-todo</span>.local</p>
+            <input type="text" class="settings-input" id="setting-primary-mdns" placeholder="smartkraft-to2do">
+            <p class="settings-hint">Access via: http://<span id="primary-mdns-preview">smartkraft-to2do</span>.local</p>
 </div>
 <button class="settings-btn" id="test-primary-wifi">TEST CONNECTION</button>
 </div>
@@ -252,8 +251,8 @@ const char* getHTML() {
 </div>
 <div class="settings-section">
 <label class="settings-label">mDNS HOSTNAME</label>
-<input type="text" class="settings-input" id="setting-backup-mdns" placeholder="smartkraft-todo-backup">
-<p class="settings-hint">Access via: http://<span id="backup-mdns-preview">smartkraft-todo-backup</span>.local</p>
+            <input type="text" class="settings-input" id="setting-backup-mdns" placeholder="smartkraft-to2do-backup">
+            <p class="settings-hint">Access via: http://<span id="backup-mdns-preview">smartkraft-to2do-backup</span>.local</p>
 </div>
 <button class="settings-btn" id="test-backup-wifi">TEST CONNECTION</button>
 </div>
@@ -281,69 +280,11 @@ const char* getHTML() {
 </div>
 </div>
 </div>
-<div class="settings-tab-content" data-content="mail">
-<div class="settings-section" style="text-align:center;">
-<label class="settings-label">SMTP MAIL INTEGRATION</label>
-<div class="theme-toggle" style="justify-content:center;">
-<span class="theme-label">DISABLED</span>
-<label class="toggle-switch">
-<input type="checkbox" id="mail-enabled-toggle">
-<span class="toggle-slider"></span>
-</label>
-<span class="theme-label">ENABLED</span>
-</div>
-<p class="settings-hint" style="margin-top:10px;">When disabled, all SMTP operations are skipped (no RAM/time wasted)</p>
-</div>
-<div class="accordion">
-<div class="accordion-item">
-<div class="accordion-header" data-accordion="smtp-config">
-<span class="accordion-title">▶ SMTP CONFIGURATION</span>
-<span class="accordion-status" id="smtp-status">Not Configured</span>
-</div>
-<div class="accordion-content" data-content="smtp-config">
-<div class="settings-section">
-<label class="settings-label">SMTP SERVER</label>
-<input type="text" class="settings-input" id="smtp-server" placeholder="smtp.gmail.com">
-<p class="settings-hint">Example: smtp.gmail.com, smtp.office365.com</p>
-</div>
-<div class="settings-section">
-<label class="settings-label">SMTP PORT</label>
-<input type="number" class="settings-input" id="smtp-port" placeholder="587" value="587">
-<p class="settings-hint">Common: 587 (TLS), 465 (SSL), 25 (No encryption)</p>
-</div>
-<div class="settings-section">
-<label class="settings-label">SMTP USERNAME</label>
-<input type="text" class="settings-input" id="smtp-user" placeholder="your@email.com">
-</div>
-<div class="settings-section">
-<label class="settings-label">SMTP PASSWORD</label>
-<input type="password" class="settings-input" id="smtp-password" placeholder="••••••••">
-<label class="settings-checkbox">
-<input type="checkbox" id="show-smtp-password">
-<span>Show Password</span>
-</label>
-</div>
-<div class="settings-section">
-<label class="settings-label">FROM EMAIL</label>
-<input type="email" class="settings-input" id="from-email" placeholder="sender@example.com">
-<p class="settings-hint">Email address to send notifications from</p>
-</div>
-<div class="settings-section">
-<label class="settings-label">USE SSL/TLS</label>
-<label class="settings-checkbox">
-<input type="checkbox" id="smtp-ssl" checked>
-<span>Enable SSL/TLS encryption</span>
-</label>
-</div>
-</div>
-</div>
-</div>
-</div>
 <div class="settings-tab-content" data-content="info">
 <div class="info-status-bar">
 <div class="info-status-item">
 <span class="info-status-label">Versiyon:</span>
-<span class="info-status-value">SmartKraft-ToDo V1.1</span>
+<span class="info-status-value">SmartKraft-To2Do V1.1</span>
 </div>
 <div class="info-status-item">
 <span class="info-status-label">WiFi:</span>
@@ -355,51 +296,62 @@ const char* getHTML() {
 </div>
 <div class="info-status-item">
 <span class="info-status-label">mDNS:</span>
-<span class="info-status-value" id="info-mdns">smartkraft-todo.local</span>
+<span class="info-status-value" id="info-mdns">smartkraft-to2do.local</span>
 </div>
 </div>
 <div class="info-section">
 <h3 class="info-title">HIZLI BASLANGIC</h3>
-<p class="info-text">1. Kategori seçin (<span id="info-cat1">KISISEL</span>, <span id="info-cat2">SMARTKRAFT</span>, <span id="info-cat3">GENEL</span>)</p>
-<p class="info-text">2. "+ YENI PROJE" ile proje oluşturun</p>
-<p class="info-text">3. Sağ alttaki "+" butonu ile görev ekleyin</p>
-<p class="info-text">4. Görev kutusuna tıklayarak tamamlayın</p>
-</div>
-<div class="info-section">
-<h3 class="info-title">OLED EKRAN KULLANIMI</h3>
-<p class="info-text">Arkadaki butona basarak bilgi ekranları arasında geçiş yapabilir, görev takibi yapabilir, ağ bağlantı bilgilerine erişebilirsiniz.</p>
-<p class="info-text"><strong>Güncelleme:</strong> Her 5 saniyede otomatik yenilenir</p>
+<p class="info-text">1. Sol taraftan bir kategori secin (<span id="info-cat1">KISISEL</span>, <span id="info-cat2">SMARTKRAFT</span>, <span id="info-cat3">GENEL</span>)</p>
+<p class="info-text">2. "+ YENI PROJE" butonu ile proje olusturun</p>
+<p class="info-text">3. Proje ustune tiklayarak secin</p>
+<p class="info-text">4. Sag alttaki "+" butonu ile gorev ekleyin</p>
 </div>
 <div class="info-section">
 <h3 class="info-title">PROJE YONETIMI</h3>
-<p class="info-text"><strong>Oluşturma:</strong> Sol alttaki "+ YENI PROJE" butonu</p>
-<p class="info-text"><strong>Düzenleme:</strong> Proje üzerine sağ tıkla > "DUZENLE"</p>
-<p class="info-text"><strong>Kopyalama:</strong> Sağ tıkla > "KOPYALA" (aynı görevlerle yeni proje)</p>
-<p class="info-text"><strong>Arşivleme:</strong> Sağ tıkla > "ARSIVLE" (gizlenir ama silinmez)</p>
-<p class="info-text"><strong>Silme:</strong> Sağ tıkla > "SIL" (kalıcı silme)</p>
+<p class="info-text"><strong>Proje Olusturma:</strong> Sol alttaki "+ YENI PROJE" butonunu kullanin</p>
+<p class="info-text"><strong>Proje Duzenleme:</strong> Proje uzerine sag tiklayip "DUZENLE" secin</p>
+<p class="info-text"><strong>Proje Kopyalama:</strong> Sag tikla > "KOPYALA" ile ayni projeden kopya olusturun</p>
+<p class="info-text"><strong>Proje Arsivleme:</strong> Sag tikla > "ARSIVLE" ile projeyi arsive tasiyin</p>
+<p class="info-text"><strong>Proje Silme:</strong> Sag tikla > "SIL" ile projeyi kalici olarak silin</p>
 </div>
 <div class="info-section">
 <h3 class="info-title">GOREV YONETIMI</h3>
-<p class="info-text"><strong>Ekleme:</strong> Sağ alttaki "+" butonu</p>
-<p class="info-text"><strong>Türler:</strong> Görev, Plan, Not, Hatırlatma</p>
-<p class="info-text"><strong>Öncelik:</strong> Düşük (Yeşil), Orta (Sarı), Yüksek (Kırmızı)</p>
-<p class="info-text"><strong>Alt Görevler:</strong> Her görevin içine checklist eklenebilir</p>
-<p class="info-text"><strong>Tarih:</strong> Görevlere tarih atayın, bildirimlerde görünsün</p>
-<p class="info-text"><strong>Bağımlılık:</strong> Görevler arası ilişki tanımlayın</p>
+<p class="info-text"><strong>Gorev Ekleme:</strong> Sag alttaki beyaz "+" butonuna tiklayin</p>
+<p class="info-text"><strong>Gorev Tamamlama:</strong> Gorevin solundaki kutuya tiklayarak tamamlandi isareti koyun</p>
+<p class="info-text"><strong>Gorev Turleri:</strong> Gorev, Plan, Not, Hatirlatma olarak 4 turde olusturabilirsiniz</p>
+<p class="info-text"><strong>Oncelik Seviyeleri:</strong> Dusuk (Yesil), Orta (Sari), Yuksek (Kirmizi)</p>
+<p class="info-text"><strong>Alt Gorevler:</strong> Her gorevin icine checklist ekleyebilirsiniz</p>
+<p class="info-text"><strong>Bagimlilik:</strong> Gorevler arasi bagimlilik ekleyerek is akisini yonetin</p>
 </div>
 <div class="info-section">
-<h3 class="info-title">AYARLAR</h3>
-<p class="info-text"><strong>GUI:</strong> Başlık, kategori isimleri, tema (açık/koyu)</p>
-<p class="info-text"><strong>Network:</strong> WiFi ayarları, mDNS adresi, test bağlantısı</p>
-<p class="info-text"><strong>Mail:</strong> E-posta bildirimleri için SMTP ayarları</p>
-<p class="info-text"><strong>Info:</strong> Sistem bilgileri ve kullanım kılavuzu</p>
+<h3 class="info-title">FILTRELEME</h3>
+<p class="info-text"><strong>TUMU:</strong> Tum gorevleri gosterir</p>
+<p class="info-text"><strong>AKTIF:</strong> Sadece tamamlanmamis gorevler</p>
+<p class="info-text"><strong>TAMAMLANAN:</strong> Sadece tamamlanmis gorevler</p>
+<p class="info-text"><strong>GOREV/PLAN/NOT/HATIRLATMA:</strong> Turune gore filtreleme</p>
+</div>
+<div class="info-section">
+<h3 class="info-title">ARAMA VE NAVIGASYON</h3>
+<p class="info-text"><strong>Proje Arama:</strong> Sol ust kosedeki arama kutusunu kullanin</p>
+<p class="info-text"><strong>Kategori Degistirme:</strong> Ust sekmelerden (<span id="info-cat1-nav">KISISEL</span>, <span id="info-cat2-nav">SMARTKRAFT</span>, <span id="info-cat3-nav">GENEL</span>) birini secin</p>
+</div>
+<div class="info-section">
+<h3 class="info-title">KISAYOLLAR</h3>
+<p class="info-text"><strong>Sag Tik:</strong> Projeler uzerinde sag tik menusu</p>
+<p class="info-text"><strong>Cift Tik:</strong> Gorev baslik veya aciklama uzerinde duzenlemek icin</p>
+<p class="info-text"><strong>FAB Butonu:</strong> Her zaman gorunen "+" butonu ile hizli gorev ekleme</p>
+</div>
+<div class="info-section">
+<h3 class="info-title">KISISELLESTIRME</h3>
+<p class="info-text"><strong>GUI Sekmesi:</strong> Uygulama basligini, kategori isimlerini ve temayi degistirin</p>
+<p class="info-text"><strong>Tema:</strong> Acik/Koyu tema arasi gecis yapabilirsiniz</p>
+<p class="info-text"><strong>Kayit:</strong> Tum ayarlar otomatik olarak tarayicida saklanir</p>
 </div>
 <div class="info-section">
 <h3 class="info-title">VERI SAKLAMA</h3>
-<p class="info-text"><strong>Kalıcı Depolama:</strong> Tüm veriler ESP32 SPIFFS hafızasında saklanır</p>
-<p class="info-text"><strong>Güvenli:</strong> Elektrik kesilse veya firmware güncellense bile veriler korunur</p>
-<p class="info-text"><strong>Tarayıcı Senkronizasyonu:</strong> Tarih/saat otomatik senkronize edilir</p>
-<p class="info-text"><strong>Yedekleme:</strong> BACKUP/RESTORE bölümünden JSON olarak yedekleyin</p>
+<p class="info-text">Tum proje, gorev ve ayarlar ESP32 cihazinda SPIFFS hafizasinda saklanir.</p>
+<p class="info-text">Elektrik kesilse ve firmware tekrar yuklenme yapilsa bile verileriniz korunur.</p>
+<p class="info-text"><strong>Kalici Saklama:</strong> WiFi ayarlari, tema, kategoriler her zaman korunur.</p>
 </div>
 <div class="accordion">
 <div class="accordion-item">
@@ -413,7 +365,7 @@ const char* getHTML() {
 <p class="info-text">Included: Projects, Tasks, GUI Settings</p>
 <p class="info-text">Excluded: WiFi credentials (for security)</p>
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:15px;">
-<button class="settings-btn" onclick="fetch('/api/backup/export').then(r=>r.text()).then(data=>{const blob=new Blob([data],{type:'application/json'});const url=window.URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='ToDo_Backup.json';document.body.appendChild(a);a.click();document.body.removeChild(a);window.URL.revokeObjectURL(url);})" style="margin:0;">EXPORT</button>
+<button class="settings-btn" onclick="fetch('/api/backup/export').then(r=>r.text()).then(data=>{const blob=new Blob([data],{type:'application/json'});const url=window.URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='To2Do_Backup.json';document.body.appendChild(a);a.click();document.body.removeChild(a);window.URL.revokeObjectURL(url);})" style="margin:0;">EXPORT</button>
 <button class="settings-btn" onclick="document.getElementById('backup-upload').click()" style="margin:0;">IMPORT</button>
 </div>
 <input type="file" id="backup-upload" accept=".json" style="display:none" onchange="if(this.files[0]){const f=new FileReader();f.onload=e=>{if(confirm('Restore backup? Current data will be overwritten.')){fetch('/api/backup/import',{method:'POST',headers:{'Content-Type':'application/json'},body:e.target.result}).then(r=>r.json()).then(d=>{alert(d.success?'Backup restored!':'Failed: '+d.error);if(d.success)location.reload();})}};f.readAsText(this.files[0])}">
@@ -456,41 +408,6 @@ const char* getHTML() {
 <div class="context-menu-item danger" data-action="delete">SIL</div>
 </div>
 <script>
-function saveMailConfig(){
-const config={
-enabled:document.getElementById('mail-enabled-toggle').checked,
-smtpServer:document.getElementById('smtp-server').value,
-smtpPort:parseInt(document.getElementById('smtp-port').value)||587,
-smtpUser:document.getElementById('smtp-user').value,
-smtpPassword:document.getElementById('smtp-password').value,
-fromEmail:document.getElementById('from-email').value,
-useSSL:document.getElementById('smtp-ssl').checked
-};
-fetch('/api/mail/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(config)})
-.then(r=>r.json())
-.then(d=>{alert(d.success?'Mail settings saved!':'Failed: '+(d.error||'Unknown'));})
-.catch(e=>alert('Error saving mail settings'));
-}
-function loadMailConfig(){
-fetch('/api/mail/config')
-.then(r=>r.json())
-.then(d=>{
-document.getElementById('mail-enabled-toggle').checked=d.enabled||false;
-document.getElementById('smtp-server').value=d.smtpServer||'';
-document.getElementById('smtp-port').value=d.smtpPort||587;
-document.getElementById('smtp-user').value=d.smtpUser||'';
-document.getElementById('smtp-password').value=d.smtpPassword||'';
-document.getElementById('from-email').value=d.fromEmail||'';
-document.getElementById('smtp-ssl').checked=d.useSSL!==false;
-document.getElementById('smtp-status').textContent=d.enabled?'Enabled':'Disabled';
-})
-.catch(e=>console.error('Load mail config error:',e));
-}
-document.getElementById('show-smtp-password')?.addEventListener('change',function(){
-const pwd=document.getElementById('smtp-password');
-pwd.type=this.checked?'text':'password';
-});
-setTimeout(loadMailConfig,1000);
 function openNotificationModal(){
 const modal=document.getElementById('notification-modal');
 modal.classList.add('active');

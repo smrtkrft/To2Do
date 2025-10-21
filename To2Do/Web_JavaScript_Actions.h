@@ -507,7 +507,7 @@ async function saveSettings() {
     // Show immediate feedback
     showToast('KAYDEDILIYOR...');
     
-    app.settings.appTitle = document.getElementById('setting-app-title').value.trim() || 'ToDo - SmartKraft';
+    app.settings.appTitle = document.getElementById('setting-app-title').value.trim() || 'To2Do - SmartKraft';
     app.settings.category1 = document.getElementById('setting-cat1').value.trim() || 'WORK';
     app.settings.category2 = document.getElementById('setting-cat2').value.trim() || 'PERSONAL';
     app.settings.category3 = document.getElementById('setting-cat3').value.trim() || 'PROJECTS';
@@ -517,21 +517,21 @@ async function saveSettings() {
     const hasNetworkSettings = document.getElementById('setting-ap-ssid');
     
     if (hasNetworkSettings) {
-        app.networkSettings.apSSID = document.getElementById('setting-ap-ssid')?.value.trim() || 'SmartKraft-ToDo';
-        app.networkSettings.apMDNS = document.getElementById('setting-ap-mdns')?.value.trim() || 'smartkraft-todo';
+    app.networkSettings.apSSID = document.getElementById('setting-ap-ssid')?.value.trim() || 'SmartKraft-To2Do';
+    app.networkSettings.apMDNS = document.getElementById('setting-ap-mdns')?.value.trim() || 'smartkraft-to2do';
         app.networkSettings.primarySSID = document.getElementById('setting-primary-ssid')?.value.trim() || '';
         app.networkSettings.primaryPassword = document.getElementById('setting-primary-password')?.value || '';
         app.networkSettings.primaryIP = document.getElementById('setting-primary-ip')?.value.trim() || '';
-        app.networkSettings.primaryMDNS = document.getElementById('setting-primary-mdns')?.value.trim() || 'smartkraft-todo';
+    app.networkSettings.primaryMDNS = document.getElementById('setting-primary-mdns')?.value.trim() || 'smartkraft-to2do';
         app.networkSettings.backupSSID = document.getElementById('setting-backup-ssid')?.value.trim() || '';
         app.networkSettings.backupPassword = document.getElementById('setting-backup-password')?.value || '';
         app.networkSettings.backupIP = document.getElementById('setting-backup-ip')?.value.trim() || '';
-        app.networkSettings.backupMDNS = document.getElementById('setting-backup-mdns')?.value.trim() || 'smartkraft-todo-backup';
+    app.networkSettings.backupMDNS = document.getElementById('setting-backup-mdns')?.value.trim() || 'smartkraft-to2do-backup';
         localStorage.setItem('networkSettings', JSON.stringify(app.networkSettings));
     }
     
     // Save to localStorage immediately (instant)
-    localStorage.setItem('todoSettings', JSON.stringify(app.settings));
+    localStorage.setItem('to2doSettings', JSON.stringify(app.settings));
     
     // Apply settings immediately (instant)
     applySettings();

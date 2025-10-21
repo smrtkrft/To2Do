@@ -1,5 +1,5 @@
 /*
- * ESP32-C6 TODO App - SmartKraft Edition
+ * ESP32-C6 To2Do App - SmartKraft Edition
  * All data persists across firmware updates (stored in SPIFFS)
  * Smart WiFi Manager with AP Mode fallback
  */
@@ -16,7 +16,6 @@
 #include "Web_CSS.h"
 #include "Web_JavaScript.h"
 #include "Backup_Manager.h"
-#include "Mail_Manager.h"
 #include "Time_Manager.h"
 #include "Notification_Manager.h"
 #include "Display_Manager.h"
@@ -25,7 +24,6 @@ WebServer server(80);
 PersistenceManager persistence;
 WiFiManager* wifiManager;
 BackupManager* backupManager;
-MailManager* mailManager;
 NotificationManager* notificationManager;
 TimeManager* timeManager;
 DisplayManager* displayManager;
@@ -43,63 +41,40 @@ void setup() {
   Serial.begin(115200);
   delay(500);
   
-  Serial.println("\n========================================");
-  Serial.println("SmartKraft To2Do Starting...");
-  Serial.println("========================================");
+  Serial.println("\n=== SmartKraft To2Do ===");
   unsigned long setupStart = millis();
   
-  // Initialize Display Manager FIRST - show SmartKraft immediately
   displayManager = new DisplayManager();
   if (displayManager->begin()) {
-    Serial.println("[Setup] Display Manager started - SmartKraft splash shown");
+    Serial.println("[Setup] ✓ OLED ready");
+  } else {
+    Serial.println("[Setup] ⚠ OLED not found");
   }
   
-  // Pre-initialize WiFi radio immediately - this "warms up" the radio
-  // so it's ready when WiFiManager calls begin()
-  Serial.println("[Setup] Pre-initializing WiFi radio...");
-  WiFi.mode(WIFI_STA);  // Wake up WiFi radio early
-  WiFi.disconnect();     // Ensure clean state
-  delay(200);            // Let radio stabilize during SPIFFS init
-  Serial.println("[Setup] WiFi radio pre-initialized and ready");
+  WiFi.mode(WIFI_STA);
+  WiFi.disconnect();
+  delay(200);
   
   if (!persistence.begin()) {
-    Serial.println("[ERROR] Persistence init failed!");
+    Serial.println("[ERROR] ✗ Persistence failed!");
     return;
   }
   
-  // Initialize managers BEFORE WiFi to speed up display updates
-  Serial.println("[Setup] Initializing managers...");
   backupManager = new BackupManager(persistence.getDataManager());
-  mailManager = new MailManager(persistence.getDataManager());
   notificationManager = new NotificationManager(persistence.getDataManager());
   timeManager = new TimeManager();
   
   notificationManager->setTimeManager(timeManager);
   
-  // Load existing time from SPIFFS first
-  if (timeManager->loadDateFromSPIFFS()) {
-    if (timeManager->isDateValid()) {
-      Serial.printf("[Setup] Loaded valid time from SPIFFS: %s %s\n", 
-                   timeManager->getFormattedDate().c_str(), 
-                   timeManager->getFormattedTime().c_str());
-    }
+  if (timeManager->loadDateFromSPIFFS() && !timeManager->isDateValid()) {
+    timeManager->setManualDate(2025, 10, 21, 12, 0);
   }
   
-  // If no valid time, set a fallback time to TODAY
-  if (!timeManager->isDateValid()) {
-    Serial.println("[Setup] No valid time found, setting fallback time to TODAY");
-    // Get current date from user context (October 21, 2025)
-    timeManager->setManualDate(2025, 10, 21, 12, 0); // Updated to current date
-  }
-  
-  // Load all data but keep SmartKraft splash on screen
   if (displayManager && displayManager->isDisplayFound()) {
-    Serial.println("[Setup] Loading data (SmartKraft splash still showing)...");
-    
     String settingsData = persistence.getDataManager()->getSettings();
     JsonDocument settingsDoc;
     deserializeJson(settingsDoc, settingsData);
-    String appTitle = settingsDoc["appTitle"] | "ToDo-SmartKraft";
+    String appTitle = settingsDoc["appTitle"] | "To2Do-SmartKraft";
     
     displayManager->setAppTitle(appTitle.c_str());
     
@@ -118,36 +93,21 @@ void setup() {
     int weekCount = weekDoc["count"] | 0;
     
     displayManager->setTaskCounts(todayCount, tomorrowCount, weekCount);
-    
-    Serial.printf("[Setup] Data loaded: Today=%d, Tomorrow=%d, Week=%d\n", 
-                 todayCount, tomorrowCount, weekCount);
-    Serial.println("[Setup] SmartKraft splash will remain until WiFi completes...");
   }
   
-  // NOW start WiFi (this will take time but display is already updated!)
-  Serial.println("[Setup] Starting WiFi Manager...");
   wifiManager = new WiFiManager(&persistence);
   wifiManager->begin();
-  
-  // Time is managed by browser sync - no NTP sync needed
-  Serial.println("[Setup] Time will be synced from browser");
   
   setupServerRoutes();
   server.begin();
   
-  // Update network info before marking system ready
   updateDisplayNetworkInfo();
   
-  // NOW system is ready - switch from SmartKraft splash to app title
   if (displayManager && displayManager->isDisplayFound()) {
     displayManager->setSystemReady();
-    Serial.println("[Setup] Display switched to app title - system ready!");
   }
   
-  Serial.println("========================================");
-  Serial.printf("[Setup] ✓ Setup completed in %lums\n", millis() - setupStart);
-  Serial.println("[Setup] Web server ready!");
-  Serial.println("========================================\n");
+  Serial.printf("[Setup] ✓ Ready (%lums)\n\n", millis() - setupStart);
 }
 
 void loop() {
@@ -186,9 +146,7 @@ void updateDisplayAppTitle() {
   String settingsData = persistence.getDataManager()->getSettings();
   JsonDocument settingsDoc;
   deserializeJson(settingsDoc, settingsData);
-  String appTitle = settingsDoc["appTitle"] | "ToDo-SmartKraft";
-  
-  Serial.printf("[Display] Updating app title to: '%s'\n", appTitle.c_str());
+  String appTitle = settingsDoc["appTitle"] | "To2Do-SmartKraft";
   
   displayManager->setAppTitle(appTitle.c_str());
 }
@@ -228,35 +186,26 @@ void updateDisplayNetworkInfo() {
   String ip = "";
   String local = "";
   
-  // Get hostname from NETWORK settings
   String networkData = persistence.getDataManager()->getNetworkSettings();
   JsonDocument networkDoc;
   deserializeJson(networkDoc, networkData);
   
-  Serial.printf("[Display] Network JSON: %s\n", networkData.c_str());
-  
   if (WiFi.getMode() == WIFI_AP) {
-    // AP Mode - use AP MDNS
     String apMDNS = networkDoc["apMDNS"] | "to2do";
     ssid = "AP: " + String(WiFi.softAPSSID());
     ip = WiFi.softAPIP().toString();
     local = String(apMDNS) + ".local";
-    Serial.printf("[Display] AP Mode - mDNS: %s\n", apMDNS.c_str());
   } else if (WiFi.status() == WL_CONNECTED) {
-    // STA Mode - use Primary MDNS
-    String priMDNS = networkDoc["primaryMDNS"] | "smartkraft-todo";
+    String priMDNS = networkDoc["primaryMDNS"] | "smartkraft-to2do";
     ssid = WiFi.SSID();
     ip = WiFi.localIP().toString();
     local = String(priMDNS) + ".local";
-    Serial.printf("[Display] STA Mode - mDNS: %s\n", priMDNS.c_str());
   } else {
     // Not connected
     ssid = "Not Connected";
     ip = "---";
     local = "---";
   }
-  
-  Serial.printf("[Display] Network Info - SSID: %s, IP: %s, Local: %s\n", ssid.c_str(), ip.c_str(), local.c_str());
   
   displayManager->setNetworkInfo(ssid, ip, local);
 }
@@ -291,10 +240,6 @@ void setupServerRoutes() {
   // Backup API endpoints
   server.on("/api/backup/export", HTTP_GET, handleBackupExport);
   server.on("/api/backup/import", HTTP_POST, handleBackupImport);
-  
-  // Mail API endpoints
-  server.on("/api/mail/config", HTTP_GET, handleGetMailConfig);
-  server.on("/api/mail/config", HTTP_POST, handleSaveMailConfig);
   
   // Notification API endpoints
   server.on("/api/notifications/today", HTTP_GET, []() {
@@ -517,7 +462,7 @@ void handleFactoryReset() {
 void handleSystemInfo() {
   DynamicJsonDocument doc(1024);
   
-  doc["version"] = "SmartKraft-ToDo V1.1";
+  doc["version"] = "SmartKraft-To2Do V1.1";
   doc["chipModel"] = ESP.getChipModel();
   doc["chipCores"] = ESP.getChipCores();
   doc["cpuFreq"] = ESP.getCpuFreqMHz();
@@ -562,36 +507,6 @@ void handleBackupImport() {
     server.send(200, "application/json", "{\"success\":true}");
   } else {
     server.send(500, "application/json", "{\"error\":\"Import failed\"}");
-  }
-}
-
-void handleGetMailConfig() {
-  if (!mailManager) {
-    server.send(500, "application/json", "{\"error\":\"Mail manager not ready\"}");
-    return;
-  }
-  
-  String configData = mailManager->getConfigJSON();
-  server.send(200, "application/json", configData);
-}
-
-void handleSaveMailConfig() {
-  if (!mailManager) {
-    server.send(500, "application/json", "{\"error\":\"Mail manager not ready\"}");
-    return;
-  }
-  
-  if (!server.hasArg("plain")) {
-    server.send(400, "application/json", "{\"error\":\"No data\"}");
-    return;
-  }
-  
-  String configData = server.arg("plain");
-  
-  if (mailManager->saveConfig(configData)) {
-    server.send(200, "application/json", "{\"success\":true}");
-  } else {
-    server.send(500, "application/json", "{\"error\":\"Save failed\"}");
   }
 }
 
