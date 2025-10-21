@@ -719,7 +719,7 @@ void handleSetLanguage() {
   String updatedSettings;
   serializeJson(settingsDoc, updatedSettings);
   
-  if (persistence.getDataManager()->saveSettings(updatedSettings)) {
+  if (persistence.getDataManager()->setSettings(updatedSettings)) {
     JsonDocument response;
     response["success"] = true;
     response["language"] = languageManager->getCurrentLanguage();
