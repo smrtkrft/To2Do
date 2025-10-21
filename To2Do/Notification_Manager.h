@@ -78,10 +78,10 @@ public:
         
         Serial.println("[Notification] WARNING: Using hardcoded fallback date!");
         
-        // Final fallback: use current actual date
+        // Final fallback: use current actual date (October 21, 2025)
         date.year = 2025;
         date.month = 10;
-        date.day = 20;
+        date.day = 21;
         
         return date;
     }

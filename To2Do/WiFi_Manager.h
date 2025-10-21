@@ -306,52 +306,20 @@ public:
             return;
         }
         
-        // Network not found, wait briefly and retry once
-        Serial.printf("[WiFi] Network not found, waiting %lums before retry...\n", INITIAL_SCAN_WAIT);
-        delay(INITIAL_SCAN_WAIT); // 3 seconds - quick retry
+        // Network not found on first scan - start AP immediately and retry in background
+        Serial.println("[WiFi] Network not found on first scan, starting AP Mode");
+        Serial.println("[WiFi] Will continue searching in background...");
+        switchToAPMode();
         
-        availableNetwork = scanForBestNetwork();
-        if (availableNetwork > 0) {
-            Serial.println("[WiFi] Network found on second scan, connecting...");
-            startConnectionSequence(availableNetwork);
-            
-            // Wait briefly for second attempt too
-            Serial.println("[WiFi] Checking connection status (second attempt)...");
-            unsigned long quickCheckStart = millis(); // Define variable here
-            while (millis() - quickCheckStart < QUICK_CONNECTION_CHECK) {
-                if (WiFi.status() == WL_CONNECTED) {
-                    delay(300);
-                    
-                    isAPMode = false;
-                    isConnected = true;
-                    tryingToConnect = false;
-                    connectionFailCount = 0;
-                    lastConnectionCheck = millis();
-                    
-                    Serial.println("[WiFi] ✓ Connected successfully on retry!");
-                    Serial.printf("[WiFi] Connection took %lums\n", millis() - connectionStartTime);
-                    Serial.printf("[WiFi] SSID: %s\n", WiFi.SSID().c_str());
-                    Serial.printf("[WiFi] IP: %s\n", WiFi.localIP().toString().c_str());
-                    Serial.printf("[WiFi] Signal: %d dBm\n", WiFi.RSSI());
-                    
-                    if (MDNS.begin(currentConnectingMDNS.c_str())) {
-                        Serial.printf("[WiFi] mDNS: http://%s.local\n", currentConnectingMDNS.c_str());
-                    }
-                    
-                    Serial.println("[WiFi] Ready!");
-                    Serial.printf("[WiFi] Startup completed in %lums\n", millis() - beginStart);
-                    return;
-                }
-                delay(100);
-            }
-            
-            Serial.printf("[WiFi] Connection pending, will complete in background\n");
-        } else {
-            Serial.println("[WiFi] Network still not available, starting AP Mode");
-            switchToAPMode();
-        }
+        // Schedule background retry (will be handled in loop())
+        lastScanTime = millis() - AP_SCAN_INTERVAL_EARLY + 5000; // Retry in 5 seconds
         
-        Serial.printf("[WiFi] Startup completed in %lums\n", millis() - beginStart);
+        Serial.printf("[WiFi] Startup completed in %lums (AP Mode with background retry)\n", millis() - beginStart);
+        return;
+        
+        /* OLD CODE - REMOVED TO SPEED UP SETUP
+        (Second scan retry code removed - now handled in background loop)
+        */
     }
     
     void loop() {

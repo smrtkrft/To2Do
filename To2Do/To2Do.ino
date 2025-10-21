@@ -13,11 +13,13 @@
 #include "Persistence_Manager.h"
 #include "WiFi_Manager.h"
 #include "Web_Interface.h"
+#include "Web_CSS.h"
 #include "Web_JavaScript.h"
 #include "Backup_Manager.h"
 #include "Mail_Manager.h"
 #include "Time_Manager.h"
 #include "Notification_Manager.h"
+#include "Display_Manager.h"
 
 WebServer server(80);
 PersistenceManager persistence;
@@ -26,10 +28,14 @@ BackupManager* backupManager;
 MailManager* mailManager;
 NotificationManager* notificationManager;
 TimeManager* timeManager;
+DisplayManager* displayManager;
 
 const size_t JSON_BUFFER_SIZE = 16384;
 
 // No more time sync tracking - browser provides all time data
+unsigned long lastDisplayUpdate = 0;
+const unsigned long DISPLAY_UPDATE_INTERVAL = 5000; // Update every 5 seconds
+bool firstDisplayUpdate = true; // Flag to force immediate first update
 
 
 
@@ -41,6 +47,12 @@ void setup() {
   Serial.println("SmartKraft To2Do Starting...");
   Serial.println("========================================");
   unsigned long setupStart = millis();
+  
+  // Initialize Display Manager FIRST - show SmartKraft immediately
+  displayManager = new DisplayManager();
+  if (displayManager->begin()) {
+    Serial.println("[Setup] Display Manager started - SmartKraft splash shown");
+  }
   
   // Pre-initialize WiFi radio immediately - this "warms up" the radio
   // so it's ready when WiFiManager calls begin()
@@ -55,10 +67,8 @@ void setup() {
     return;
   }
   
-  Serial.println("[Setup] Starting WiFi Manager...");
-  wifiManager = new WiFiManager(&persistence);
-  wifiManager->begin();
-  
+  // Initialize managers BEFORE WiFi to speed up display updates
+  Serial.println("[Setup] Initializing managers...");
   backupManager = new BackupManager(persistence.getDataManager());
   mailManager = new MailManager(persistence.getDataManager());
   notificationManager = new NotificationManager(persistence.getDataManager());
@@ -75,17 +85,64 @@ void setup() {
     }
   }
   
-  // If no valid time, set a fallback time
+  // If no valid time, set a fallback time to TODAY
   if (!timeManager->isDateValid()) {
-    Serial.println("[Setup] No valid time found, setting fallback time");
-    timeManager->setManualDate(2025, 10, 20, 12, 0); // Fallback time
+    Serial.println("[Setup] No valid time found, setting fallback time to TODAY");
+    // Get current date from user context (October 21, 2025)
+    timeManager->setManualDate(2025, 10, 21, 12, 0); // Updated to current date
   }
+  
+  // Load all data but keep SmartKraft splash on screen
+  if (displayManager && displayManager->isDisplayFound()) {
+    Serial.println("[Setup] Loading data (SmartKraft splash still showing)...");
+    
+    String settingsData = persistence.getDataManager()->getSettings();
+    JsonDocument settingsDoc;
+    deserializeJson(settingsDoc, settingsData);
+    String appTitle = settingsDoc["appTitle"] | "ToDo-SmartKraft";
+    
+    displayManager->setAppTitle(appTitle.c_str());
+    
+    // Get task counts immediately
+    String todayJson = notificationManager->getNotifications("today");
+    String tomorrowJson = notificationManager->getNotifications("tomorrow");
+    String weekJson = notificationManager->getNotifications("week");
+    
+    JsonDocument todayDoc, tomorrowDoc, weekDoc;
+    deserializeJson(todayDoc, todayJson);
+    deserializeJson(tomorrowDoc, tomorrowJson);
+    deserializeJson(weekDoc, weekJson);
+    
+    int todayCount = todayDoc["count"] | 0;
+    int tomorrowCount = tomorrowDoc["count"] | 0;
+    int weekCount = weekDoc["count"] | 0;
+    
+    displayManager->setTaskCounts(todayCount, tomorrowCount, weekCount);
+    
+    Serial.printf("[Setup] Data loaded: Today=%d, Tomorrow=%d, Week=%d\n", 
+                 todayCount, tomorrowCount, weekCount);
+    Serial.println("[Setup] SmartKraft splash will remain until WiFi completes...");
+  }
+  
+  // NOW start WiFi (this will take time but display is already updated!)
+  Serial.println("[Setup] Starting WiFi Manager...");
+  wifiManager = new WiFiManager(&persistence);
+  wifiManager->begin();
   
   // Time is managed by browser sync - no NTP sync needed
   Serial.println("[Setup] Time will be synced from browser");
   
   setupServerRoutes();
   server.begin();
+  
+  // Update network info before marking system ready
+  updateDisplayNetworkInfo();
+  
+  // NOW system is ready - switch from SmartKraft splash to app title
+  if (displayManager && displayManager->isDisplayFound()) {
+    displayManager->setSystemReady();
+    Serial.println("[Setup] Display switched to app title - system ready!");
+  }
   
   Serial.println("========================================");
   Serial.printf("[Setup] ✓ Setup completed in %lums\n", millis() - setupStart);
@@ -97,15 +154,120 @@ void loop() {
   wifiManager->loop();
   server.handleClient();
   
+  // Display Manager loop - handles button and screen updates
+  if (displayManager && displayManager->isDisplayFound()) {
+    displayManager->loop();
+    
+    // Update all display data periodically (every 5 seconds) or immediately on first run
+    unsigned long currentTime = millis();
+    if (firstDisplayUpdate || (currentTime - lastDisplayUpdate >= DISPLAY_UPDATE_INTERVAL)) {
+      lastDisplayUpdate = currentTime;
+      firstDisplayUpdate = false; // Clear the flag after first update
+      
+      // Update app title from settings
+      updateDisplayAppTitle();
+      
+      // Update task counts
+      updateDisplayTaskCounts();
+      
+      // Refresh current page on screen
+      displayManager->refreshCurrentPage();
+    }
+  }
+  
   // No more internet time sync - browser provides time via /api/time endpoint
   
   delay(2); // Small delay for stability
+}
+
+void updateDisplayAppTitle() {
+  if (!displayManager) return;
+  
+  String settingsData = persistence.getDataManager()->getSettings();
+  JsonDocument settingsDoc;
+  deserializeJson(settingsDoc, settingsData);
+  String appTitle = settingsDoc["appTitle"] | "ToDo-SmartKraft";
+  
+  Serial.printf("[Display] Updating app title to: '%s'\n", appTitle.c_str());
+  
+  displayManager->setAppTitle(appTitle.c_str());
+}
+
+void updateDisplayTaskCounts() {
+  if (!displayManager || !notificationManager || !timeManager) return;
+  
+  // Get task counts from notification manager using getNotifications
+  String todayJson = notificationManager->getNotifications("today");
+  String tomorrowJson = notificationManager->getNotifications("tomorrow");
+  String weekJson = notificationManager->getNotifications("week");
+  
+  // Parse JSON to get counts
+  JsonDocument todayDoc;
+  JsonDocument tomorrowDoc;
+  JsonDocument weekDoc;
+  
+  deserializeJson(todayDoc, todayJson);
+  deserializeJson(tomorrowDoc, tomorrowJson);
+  deserializeJson(weekDoc, weekJson);
+  
+  int todayCount = todayDoc["count"] | 0;
+  int tomorrowCount = tomorrowDoc["count"] | 0;
+  int weekCount = weekDoc["count"] | 0;
+  
+  // Update display
+  displayManager->setTaskCounts(todayCount, tomorrowCount, weekCount);
+  
+  // Update network info
+  updateDisplayNetworkInfo();
+}
+
+void updateDisplayNetworkInfo() {
+  if (!displayManager || !wifiManager) return;
+  
+  String ssid = "";
+  String ip = "";
+  String local = "";
+  
+  // Get hostname from NETWORK settings
+  String networkData = persistence.getDataManager()->getNetworkSettings();
+  JsonDocument networkDoc;
+  deserializeJson(networkDoc, networkData);
+  
+  Serial.printf("[Display] Network JSON: %s\n", networkData.c_str());
+  
+  if (WiFi.getMode() == WIFI_AP) {
+    // AP Mode - use AP MDNS
+    String apMDNS = networkDoc["apMDNS"] | "to2do";
+    ssid = "AP: " + String(WiFi.softAPSSID());
+    ip = WiFi.softAPIP().toString();
+    local = String(apMDNS) + ".local";
+    Serial.printf("[Display] AP Mode - mDNS: %s\n", apMDNS.c_str());
+  } else if (WiFi.status() == WL_CONNECTED) {
+    // STA Mode - use Primary MDNS
+    String priMDNS = networkDoc["primaryMDNS"] | "smartkraft-todo";
+    ssid = WiFi.SSID();
+    ip = WiFi.localIP().toString();
+    local = String(priMDNS) + ".local";
+    Serial.printf("[Display] STA Mode - mDNS: %s\n", priMDNS.c_str());
+  } else {
+    // Not connected
+    ssid = "Not Connected";
+    ip = "---";
+    local = "---";
+  }
+  
+  Serial.printf("[Display] Network Info - SSID: %s, IP: %s, Local: %s\n", ssid.c_str(), ip.c_str(), local.c_str());
+  
+  displayManager->setNetworkInfo(ssid, ip, local);
 }
 
 void setupServerRoutes() {
   server.on("/", HTTP_GET, handleRoot);
   server.on("/app.js", HTTP_GET, []() {
     server.send(200, "application/javascript", getJavaScriptCombined());
+  });
+  server.on("/app.css", HTTP_GET, []() {
+    server.send(200, "text/css", getCSS());
   });
   server.on("/api/todos", HTTP_GET, handleGetTodos);
   server.on("/api/todos", HTTP_POST, handleCreateTodo);
@@ -120,6 +282,7 @@ void setupServerRoutes() {
   server.on("/api/network/status", HTTP_GET, handleNetworkStatus);
   server.on("/api/network/settings", HTTP_GET, handleGetNetworkSettings);
   server.on("/api/network/config", HTTP_POST, handleNetworkConfig);
+  server.on("/api/network/test", HTTP_POST, handleNetworkTest);
   
   // System API endpoints
   server.on("/api/factory-reset", HTTP_POST, handleFactoryReset);
@@ -262,6 +425,56 @@ void handleNetworkConfig() {
                                  bkpSSID, bkpPass, bkpIP, bkpMDNS);
   
   server.send(200, "application/json", "{\"success\":true,\"message\":\"Settings saved and connecting...\"}");
+}
+
+void handleNetworkTest() {
+  if (!server.hasArg("plain")) {
+    server.send(400, "application/json", "{\"error\":\"No data\"}");
+    return;
+  }
+  
+  String body = server.arg("plain");
+  DynamicJsonDocument doc(512);
+  DeserializationError error = deserializeJson(doc, body);
+  
+  if (error) {
+    server.send(400, "application/json", "{\"error\":\"Invalid JSON\"}");
+    return;
+  }
+  
+  String type = doc["type"] | "";
+  String ssid = doc["ssid"] | "";
+  
+  if (ssid.isEmpty()) {
+    server.send(400, "application/json", "{\"success\":false,\"message\":\"SSID is required\"}");
+    return;
+  }
+  
+  // Scan for the specified network
+  Serial.printf("[WiFi Test] Scanning for network: %s\n", ssid.c_str());
+  
+  int n = WiFi.scanNetworks();
+  bool found = false;
+  int rssi = 0;
+  
+  for (int i = 0; i < n; i++) {
+    if (WiFi.SSID(i) == ssid) {
+      found = true;
+      rssi = WiFi.RSSI(i);
+      break;
+    }
+  }
+  
+  WiFi.scanDelete();
+  
+  if (found) {
+    String response = "{\"success\":true,\"message\":\"Network found\",\"rssi\":";
+    response += String(rssi);
+    response += "}";
+    server.send(200, "application/json", response);
+  } else {
+    server.send(200, "application/json", "{\"success\":false,\"message\":\"Network not found\"}");
+  }
 }
 
 // ==================== SETTINGS API ====================

@@ -193,7 +193,6 @@ public:
             network[kv.key()] = kv.value();
         }
         
-        return true;
         return saveToFile();
     }
     
